@@ -147,7 +147,7 @@
     border-radius:var(--radius-pill);
   }
   main{
-    padding:calc(74px + env(safe-area-inset-top)) 18px calc(114px + env(safe-area-inset-bottom));
+    padding:calc(74px + env(safe-area-inset-top)) 18px calc(150px + env(safe-area-inset-bottom));
   }
   .hero{ margin:8px 0 16px; }
   .hero h1{
@@ -256,9 +256,10 @@
     border:none; box-shadow:0 4px 14px rgba(0,0,0,.28); cursor:pointer;
     display:flex; align-items:center; justify-content:center; gap:6px;
     font-family:'Nunito',sans-serif; font-weight:800; font-size:14px;
-    transition:transform var(--motion-fast) var(--ease);
+    transition:transform var(--motion-fast) var(--ease), opacity var(--motion-base) var(--ease);
     z-index:25;
   }
+  .fab.fab-hidden{ opacity:0; transform:translateY(16px); pointer-events:none; }
   [data-theme="dark"] .fab{ color:#1E1A22; }
   [data-theme="dark"] .fab svg{ stroke:#1E1A22; }
   .fab:active{ transform:scale(0.95); }
@@ -428,6 +429,8 @@
   .gallery-card .cap .s{ font-size:10px; color:var(--ink-soft); margin-top:2px; }
   .del-x{ position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.45); color:#fff; border:none; border-radius:50%; width:22px; height:22px; font-size:12px; cursor:pointer; line-height:22px; text-align:center; padding:0; }
   .insight-item{ padding:9px 0; border-bottom:1px dashed var(--line); font-size:12.5px; line-height:1.55; }
+  .insight-card{ padding-bottom:10px; border-bottom:1px dashed var(--line); }
+  .insight-card:last-child{ border-bottom:none; padding-bottom:0; }
   .wk-chart-block{ margin-bottom:18px; }
   .wk-chart-block:last-child{ margin-bottom:2px; }
   .wk-chart-label{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; font-weight:800; color:var(--ink); margin-bottom:2px; }
@@ -979,23 +982,80 @@ function valueAtScore(row, score){
   const rate = (row[4]-row[3]) / (PCT_X[4]-PCT_X[3]);
   return row[4] + (score-PCT_X[4])*rate;
 }
-// Projects her next weekly weigh-in target by holding her current percentile
-// position steady on the WHO curve — i.e. "what would keep her tracking on
-// her own trajectory," not a generic average.
+/* Recent growth rate for a measurement type: prefers a genuine recent window
+   (last ~14 days) so the rate reflects her CURRENT pace, not a since-birth
+   average that gets less representative as she gets older. Falls back
+   gracefully when only sparse data exists. */
+function recentGrowthRate(type){
+  const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(list.length<2) return null;
+  const latest = list[list.length-1];
+  const latestTime = new Date(latest.date).getTime();
+  const preferredWindowDays = 14;
+  let windowStart = list.slice(0,-1).filter(m=> (latestTime-new Date(m.date).getTime()) <= preferredWindowDays*86400000)
+    .sort((a,b)=>new Date(a.date)-new Date(b.date))[0];
+  let basis;
+  if(windowStart){
+    basis = `over the latest ${preferredWindowDays}-day measurement period`;
+  } else {
+    windowStart = list[list.length-2];
+    basis = list.length===2 ? 'since birth' : `over her last ${Math.round((latestTime-new Date(windowStart.date).getTime())/86400000)} days of measurements`;
+  }
+  const days = Math.max(1, (latestTime-new Date(windowStart.date).getTime())/86400000);
+  const perDay = (latest.value-windowStart.value)*1000/days;
+  return { perDay, basis, windowStart, latest, isEarlyEstimate: list.length===2 };
+}
+/* Projects her next weekly weigh-in from her own recent growth pace — an
+   extrapolation, not a target she needs to hit. */
 function projectNextWeighIn(){
   const list = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
   if(!list.length) return null;
   const latest = list[list.length-1];
-  const curAge = ageMonthsDecimal(state.profile.birthDate, latest.date);
   const nextDate = new Date(new Date(latest.date).getTime() + 7*86400000);
-  const nextAge = ageMonthsDecimal(state.profile.birthDate, nextDate.toISOString());
-  const curRow = interpolateRow('weight_kg', curAge);
-  const score = percentileScore(curRow, latest.value);
-  const nextRow = interpolateRow('weight_kg', Math.min(24, nextAge));
-  const idealVal = valueAtScore(nextRow, score);
-  const gainG = Math.round((idealVal - latest.value) * 1000);
   const daysUntil = Math.round((nextDate - new Date()) / 86400000);
-  return { lastDate: latest.date, lastValue: latest.value, nextDate, idealVal, gainG, daysUntil };
+  const rate = recentGrowthRate('weight');
+  if(!rate) return { lastDate: latest.date, lastValue: latest.value, nextDate, daysUntil, insufficient:true };
+  const daysToNext = (nextDate-new Date(latest.date))/86400000;
+  const projectedVal = latest.value + (rate.perDay/1000)*daysToNext;
+  return { lastDate: latest.date, lastValue: latest.value, nextDate, daysUntil, insufficient:false, projectedVal, perDay:rate.perDay, basis:rate.basis, isEarlyEstimate:rate.isEarlyEstimate };
+}
+/* Once a new weigh-in lands, retroactively work out what the PREVIOUS
+   measurement's recent pace would have projected for today — no persistence
+   needed, since the growth rate "as of" any past measurement is fully
+   recoverable from the measurement history itself. */
+function growthPaceComparisonNote(){
+  const list = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(list.length<3) return null;
+  const latest = list[list.length-1], prev = list[list.length-2];
+  const priorList = list.slice(0,-1); // history as it stood at 'prev'
+  const priorWindowStart = priorList.slice(0,-1).filter(m=> (new Date(prev.date)-new Date(m.date))/86400000 <= 14)
+    .sort((a,b)=>new Date(a.date)-new Date(b.date))[0] || priorList[priorList.length-2];
+  if(!priorWindowStart) return null;
+  const priorDays = Math.max(1, (new Date(prev.date)-new Date(priorWindowStart.date))/86400000);
+  const priorRate = (prev.value-priorWindowStart.value)*1000/priorDays;
+  const gapDays = (new Date(latest.date)-new Date(prev.date))/86400000;
+  const projectedForLatest = prev.value + (priorRate/1000)*gapDays;
+  const diffG = (latest.value-projectedForLatest)*1000;
+  if(Math.abs(diffG) < 30) return { text:'Tracking close to her recent trajectory.', changed:false };
+  return { text: diffG>0 ? 'Growth has been a little faster than her previous recent pace.' : 'Growth has been a little slower than her previous recent pace.', changed:true, diffG };
+}
+function renderNextWeighInBlock(){
+  const proj = projectNextWeighIn();
+  if(!proj) return '';
+  const paceNote = growthPaceComparisonNote();
+  return `
+    <div class="surface-group" style="padding:14px 16px;margin-top:14px;">
+      <div style="font-weight:800;font-size:13px;">Next weigh-in · ${fmtDate(proj.nextDate)}</div>
+      ${proj.insufficient
+        ? `<div class="meta-text" style="margin-top:4px;">Not enough recent measurements for a useful projection yet.</div>`
+        : `
+        <div class="secondary-metric" style="margin-top:4px;">Projected ~${proj.projectedVal.toFixed(2)} kg${proj.isEarlyEstimate?' (early estimate)':''}</div>
+        <div class="meta-text" style="margin-top:2px;">Based on ${proj.perDay>=0?'+':''}${proj.perDay.toFixed(1)} g/day ${proj.basis}</div>
+        ${paceNote ? `<div class="meta-text" style="margin-top:6px;">${paceNote.text}</div>` : ''}
+        <div class="note" style="margin-top:8px;">This is an extrapolation from her own recent growth, not a target — her WHO percentile trajectory above is the more meaningful longitudinal reference.</div>
+      `}
+    </div>
+  `;
 }
 
 function growthNarrative(type){
@@ -1245,6 +1305,20 @@ function bindDataLoadError(){
     catch(e){ console.error('copy failed', e); }
   });
 }
+let lastScrollY = 0;
+let fabScrollListenerAttached = false;
+function setupFabScrollHide(){
+  if(fabScrollListenerAttached) return;
+  fabScrollListenerAttached = true;
+  window.addEventListener('scroll', ()=>{
+    const fab = document.getElementById('fabAdd');
+    if(!fab) return;
+    const y = window.scrollY;
+    if(y > lastScrollY + 5 && y > 80) fab.classList.add('fab-hidden');
+    else if(y < lastScrollY - 5) fab.classList.remove('fab-hidden');
+    lastScrollY = y;
+  }, { passive:true });
+}
 function render(){
   const app = document.getElementById('app');
   if(!authReady){ app.innerHTML = renderLoadingScreen(); return; }
@@ -1276,6 +1350,7 @@ function render(){
   });
   document.getElementById('fabAdd').addEventListener('click', ()=> openSheet('menu'));
   document.getElementById('sheetOverlay').addEventListener('click', (e)=>{ if(e.target.id==='sheetOverlay') closeSheet(); });
+  setupFabScrollHide();
   renderMain();
 }
 function renderMain(){
@@ -2108,11 +2183,18 @@ function buildTimelineEvents(){
   state.sleeps.forEach(s=>{ events.push({id:s.id, kind:'sleep', date:s.date, cat:'sleep', line: `😴 ${s.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(s.mins)}${s.endAt?' · ends '+fmtTime(s.endAt):''}`}); });
   state.measurements.forEach(m=>{ events.push({id:m.id, kind:'measurement', date:m.date, cat:'growth', line: `${m.type==='weight'?'⚖️':m.type==='length'?'📏':'🧠'} ${labelType(m.type)} · ${m.value}${unitFor(m.type)}`}); });
   state.vaccines.filter(v=>v.givenDate).forEach(v=>{ events.push({id:v.id, kind:'vaccine', date:v.givenDate, cat:'health', line: `💉 ${v.name} given`}); });
-  state.appointments.forEach(a=>{ events.push({id:a.id, kind:'appointment', date:a.date, cat:'health', line: `🩺 ${a.title}${a.status==='completed'?' (completed)':a.status==='cancelled'?' (cancelled)':''}`}); });
+  /* Only PAST appointments belong in the "what happened" history — a future
+     appointment is not a completed event. Upcoming ones surface separately. */
+  state.appointments.filter(a=> new Date(a.date) <= new Date()).forEach(a=>{ events.push({id:a.id, kind:'appointment', date:a.date, cat:'health', line: `🩺 ${a.title}${a.status==='completed'?' (completed)':a.status==='cancelled'?' (cancelled)':''}`}); });
   state.temperatures.forEach(t=>{ events.push({id:t.id, kind:'temperature', date:t.date, cat:'health', line: `🌡 ${t.tempC}°C${t.method?' · '+t.method:''}`}); });
   state.healthRecords.forEach(r=>{ events.push({id:r.id, kind:'healthRecord', date:r.date, cat:'health', line: `${healthCatIcon(r.category)} ${r.title}`}); });
   state.milestones.forEach(m=>{ events.push({id:m.id, kind:'milestone', date:m.date, cat:'moments', line: `⭐ ${m.title}`}); });
   return events.sort((a,b)=> new Date(b.date)-new Date(a.date));
+}
+function upcomingItems(){
+  const appts = state.appointments.filter(a=>(a.status||'upcoming')==='upcoming' && new Date(a.date)>=new Date()).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const vaccines = state.vaccines.filter(v=>!v.givenDate && !v.notApplicable && !v.hidden).sort((a,b)=>a.dueMonths-b.dueMonths);
+  return { appts, vaccines };
 }
 
 /* ---------------- Home (Today dashboard) ---------------- */
@@ -2135,6 +2217,7 @@ function renderHome(){
   const tempBanner = urgentTempBanner();
   const activeSleepMins = state.activeSleep ? Math.max(0, Math.floor((Date.now()-new Date(state.activeSleep.startAt).getTime())/60000)) : 0;
   const activeSleepLong = activeSleepMins >= 480;
+  const topInsight = generateSmartInsights().find(i=> i.importance>=40 && i.id!=='stable-summary') || null;
 
   return `
     ${tempBanner}
@@ -2181,7 +2264,7 @@ function renderHome(){
     <div class="card">
       <div class="hero-metric">${latestW.value} <span style="font-size:16px;font-weight:700;">kg</span></div>
       ${nar ? `<div class="secondary-metric">${nar.verdict}</div>` : ''}
-      ${proj ? `<div class="support-text">Next weigh-in ${fmtDate(proj.nextDate)} · target ≈ ${proj.idealVal.toFixed(2)} kg</div>` : ''}
+      ${proj && !proj.insufficient ? `<div class="support-text">Next weigh-in ${fmtDate(proj.nextDate)} · projected ~${proj.projectedVal.toFixed(2)} kg from recent growth</div>` : ''}
     </div>` : ''}
 
     <div class="section-header">Care</div>
@@ -2189,6 +2272,15 @@ function renderHome(){
       <div class="main" style="font-weight:600;">Feeding, sleep &amp; nappies</div>
       <div class="meta-text">Summaries &amp; insights →</div>
     </div>
+    ${topInsight ? `
+    <div class="card" id="homeInsightCard" style="cursor:pointer;margin-top:10px;">
+      <div style="display:flex;align-items:center;gap:7px;">
+        <span class="chip due" style="text-transform:none;">${{change:'Change',pattern:'Pattern',rhythm:'Rhythm',relationship:'Possible link',consistency:'Steady',milestone:'Milestone'}[topInsight.type]||''}</span>
+        <div style="font-weight:800;font-size:13.5px;">${escapeHtml(topInsight.title)}</div>
+      </div>
+      <div class="support-text" style="margin-top:5px;">${topInsight.body}</div>
+      <div class="meta-text" style="margin-top:6px;color:var(--lavender-deep);font-weight:700;">View insight →</div>
+    </div>` : ''}
   `;
 }
 function bindHome(){
@@ -2204,6 +2296,8 @@ function bindHome(){
   if(hwb) hwb.addEventListener('click', async ()=>{ hwb.disabled = true; await handleWakeUp(false); });
   const hesb = document.getElementById('homeEditSleepStartBtn');
   if(hesb) hesb.addEventListener('click', ()=> openEditSleepStart());
+  const hic = document.getElementById('homeInsightCard');
+  if(hic) hic.addEventListener('click', ()=>{ currentView='care'; render(); });
 }
 
 /* ---------------- Add (unified quick-log hub) ---------------- */
@@ -2625,7 +2719,7 @@ function renderGrowth(){
     <div class="stat-row">
       <div class="stat-cell">
         <div class="stat-val">${trend.perDay!=null ? (currentGrowthTab==='weight' ? `${trend.perDay>=0?'+':''}${(trend.perDay*1000).toFixed(1)} g/day` : `${trend.perDay>=0?'+':''}${trend.perDay.toFixed(2)} cm/day`) : '—'}</div>
-        <div class="stat-lbl">Average gain</div>
+        <div class="stat-lbl">Average gain since birth</div>
       </div>
       <div class="stat-div"></div>
       <div class="stat-cell">
@@ -2633,6 +2727,8 @@ function renderGrowth(){
         <div class="stat-lbl">Since birth</div>
       </div>
     </div>` : (latest ? `<div class="meta-text" style="margin-top:12px;">Not enough measurements for a reliable trend yet.</div>` : '')}
+
+    ${currentGrowthTab==='weight' ? renderNextWeighInBlock() : ''}
 
     <div class="disclosure-row" id="toggleExplain" role="button" tabindex="0" aria-expanded="${growthExplainOpen}">
       <span style="display:flex;align-items:center;gap:8px;">ⓘ About this trend</span>
@@ -2760,47 +2856,231 @@ function weeklySummary(){
     wet7PerDay: wet7/7, dirty7PerDay: dirty7/7, weightChange7
   };
 }
-function generateInsights(){
-  const insights = [];
-  const cutoff3 = Date.now()-3*86400000, cutoff4 = Date.now()-4*86400000, cutoff7 = Date.now()-7*86400000;
-  const feeds4 = state.feeds.map(normalizeFeed).filter(f=>new Date(f.date).getTime()>=cutoff4);
-  if(feeds4.length>=6){
-    const evening = feeds4.filter(f=>{ const h=new Date(f.date).getHours(); return h>=18 && h<22; }).length;
-    if(evening/feeds4.length>=0.4) insights.push(`Feeding has been more frequent between 6–10pm over the last few days (${evening} of ${feeds4.length} feeds).`);
-  }
-  const feeds7 = state.feeds.map(normalizeFeed).filter(f=>new Date(f.date).getTime()>=cutoff7).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  if(feeds7.length>=6){
-    const gaps=[]; for(let i=1;i<feeds7.length;i++) gaps.push((new Date(feeds7[i].date)-new Date(feeds7[i-1].date))/3600000);
-    const sorted = gaps.slice().sort((a,b)=>a-b);
-    if(sorted.length){
-      const p25=sorted[Math.floor(sorted.length*0.25)], p75=sorted[Math.floor(sorted.length*0.75)];
-      insights.push(`Most feeds this week landed between about ${p25.toFixed(1)}h and ${p75.toFixed(1)}h apart.`);
+/* ================= Smart Insight Engine =================
+   Pipeline: raw records → daily/period aggregates (reusing the same
+   dailySummary/buildXWeek functions used everywhere else) → candidate
+   generators, each gated on real data-sufficiency → ranked → top 2–4.
+   Every insight carries its own supporting numbers so "Why am I seeing
+   this?" never has to be taken on faith. Nothing here is LLM-generated —
+   all numbers are deterministic calculations over the baby's own records. */
+function mkInsight(o){ return o; }
+function daysAgoKeys(n, offset){
+  offset = offset||0;
+  const keys=[]; for(let i=0;i<n;i++){ const d=new Date(); d.setDate(d.getDate()-(1+offset+i)); keys.push(sydDateKey(d)); }
+  return keys.reverse();
+}
+
+/* --- Change: her longest overnight stretch, recent vs previous comparable nights --- */
+function insightChangeSleepStretch(){
+  const keys = daysAgoKeys(21);
+  const withData = buildSleepWeek(keys).filter(b=>b.hasData);
+  if(withData.length<7) return null;
+  const recent = withData.slice(-3), prior = withData.slice(-7,-3);
+  if(recent.length<3 || prior.length<3) return null;
+  const recentAvg = recent.reduce((s,b)=>s+b.longest,0)/recent.length;
+  const priorAvg = prior.reduce((s,b)=>s+b.longest,0)/prior.length;
+  const diff = recentAvg-priorAvg;
+  if(Math.abs(diff)<20) return null;
+  const longer = diff>0;
+  return mkInsight({
+    id:'change-sleep-stretch', type:'change', domain:'sleep',
+    title: longer?'Longer overnight stretch':'Shorter overnight stretch',
+    body: `Her longest sleep stretch over the last ${recent.length} nights averaged ${fmtDuration(recentAvg)}, compared with ${fmtDuration(priorAvg)} over the previous ${prior.length} comparable nights.`,
+    importance: Math.min(92, 45+Math.abs(diff)/3),
+    evidence: { current: recent.map(b=>({label:b.dayKey, value:fmtDuration(b.longest)})), comparison: prior.map(b=>({label:b.dayKey, value:fmtDuration(b.longest)})) }
+  });
+}
+/* --- Change: feeding frequency, recent vs previous comparable days --- */
+function insightChangeFeedFrequency(){
+  const keys = daysAgoKeys(21);
+  const withData = buildFeedWeek(keys).filter(b=>b.hasData);
+  if(withData.length<7) return null;
+  const recent = withData.slice(-3), prior = withData.slice(-7,-3);
+  if(recent.length<3 || prior.length<3) return null;
+  const recentAvg = recent.reduce((s,b)=>s+b.babyFeedCount,0)/recent.length;
+  const priorAvg = prior.reduce((s,b)=>s+b.babyFeedCount,0)/prior.length;
+  const diff = recentAvg-priorAvg;
+  if(Math.abs(diff)<1.2) return null;
+  return mkInsight({
+    id:'change-feed-frequency', type:'change', domain:'feed',
+    title: diff>0?'Feeding has become more frequent':'Feeding has become less frequent',
+    body: `Averaging ${recentAvg.toFixed(1)} feeds/day over the last ${recent.length} days, compared with ${priorAvg.toFixed(1)}/day over the previous ${prior.length} comparable days.`,
+    importance: Math.min(85, 40+Math.abs(diff)*8),
+    evidence: { current: recent.map(b=>({label:b.dayKey, value:String(b.babyFeedCount)})), comparison: prior.map(b=>({label:b.dayKey, value:String(b.babyFeedCount)})) }
+  });
+}
+/* --- Consistency: wet nappies steady across recent well-logged days --- */
+function insightConsistencyNappy(){
+  const keys = daysAgoKeys(10);
+  const buckets = buildNappyWeek(keys).filter(b=>b.hasData);
+  if(buckets.length<4) return null;
+  const last4 = buckets.slice(-4);
+  const vals = last4.map(b=>b.wetOut);
+  const min=Math.min(...vals), max=Math.max(...vals);
+  if(max-min>2 || min<2) return null;
+  return mkInsight({
+    id:'consistency-nappy-wet', type:'consistency', domain:'nappy',
+    title:'Wet nappies have been steady',
+    body:`Wet-containing nappies were between ${min} and ${max} on each of the last ${last4.length} completed well-logged days.`,
+    importance: 28,
+    evidence: { current: last4.map(b=>({label:b.dayKey, value:String(b.wetOut)})) }
+  });
+}
+/* --- Rhythm: does her longest sleep tend to start around the same time? --- */
+function insightRhythmSleepTiming(){
+  const keys = daysAgoKeys(10);
+  const starts = [];
+  keys.forEach(dayKey=>{
+    const daysSleeps = state.sleeps.filter(s=> sydDateKey(s.date)===dayKey);
+    if(!daysSleeps.length) return;
+    const longest = daysSleeps.reduce((mx,s)=> (s.mins||0)>(mx?mx.mins:0) ? s : mx, null);
+    if(longest && longest.mins>=60) starts.push({dayKey, date:longest.date});
+  });
+  if(starts.length<5) return null;
+  const recent5 = starts.slice(-5);
+  const minsFrom6pm = recent5.map(x=>{
+    const p = sydDateParts(x.date);
+    let total = parseInt(p.hour,10)*60+parseInt(p.minute,10) - 18*60;
+    if(total<0) total += 24*60;
+    return total;
+  });
+  const sorted = minsFrom6pm.slice().sort((a,b)=>a-b);
+  const median = sorted[Math.floor(sorted.length/2)];
+  const within = minsFrom6pm.filter(v=>Math.abs(v-median)<=75);
+  if(within.length < Math.ceil(recent5.length*0.7)) return null;
+  const toClock = m=>{ let total=((18*60+m)%(24*60)+24*60)%(24*60); const h=Math.floor(total/60), mm=total%60; const ap=h>=12?'pm':'am'; let hh=h%12; if(hh===0)hh=12; return `${hh}:${String(mm).padStart(2,'0')}${ap}`; };
+  return mkInsight({
+    id:'rhythm-sleep-timing', type:'rhythm', domain:'sleep',
+    title:'Longest sleep usually begins around the same time',
+    body:`Across the last ${recent5.length} comparable days, her longest sleep period began between ${toClock(Math.min(...within))} and ${toClock(Math.max(...within))} on ${within.length} of those days.`,
+    importance: 33,
+    evidence: { current: recent5.map(x=>({label:x.dayKey, value:fmtTime(x.date)})) }
+  });
+}
+/* --- Pattern: do evening feeds cluster closer together than the rest of the day? --- */
+function insightPatternEveningFeeds(){
+  const keys = daysAgoKeys(8);
+  let eveningGaps=[], dayGaps=[], daysWithEnough=0;
+  keys.forEach(dayKey=>{
+    const feeds = state.feeds.map(normalizeFeed).filter(f=>f.type!=='pumping' && sydDateKey(f.date)===dayKey).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(feeds.length<3) return;
+    const evening = feeds.filter(f=>{ const h=parseInt(sydDateParts(f.date).hour,10); return h>=18&&h<22; });
+    if(evening.length>=2) daysWithEnough++;
+    for(let i=1;i<feeds.length;i++){
+      const gap=(new Date(feeds[i].date)-new Date(feeds[i-1].date))/60000;
+      const h=parseInt(sydDateParts(feeds[i].date).hour,10);
+      if(h>=18&&h<22) eveningGaps.push(gap); else dayGaps.push(gap);
     }
-  }
-  const sleeps7 = state.sleeps.filter(s=>new Date(s.date).getTime()>=cutoff7).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  if(sleeps7.length>=4){
-    const half=Math.floor(sleeps7.length/2);
-    const earlyMax=Math.max(...sleeps7.slice(0,half).map(s=>s.mins||0));
-    const lateMax=Math.max(...sleeps7.slice(half).map(s=>s.mins||0));
-    if(lateMax>earlyMax*1.15) insights.push(`Her longest recorded sleep increased from about ${fmtDuration(earlyMax)} earlier this week to ${fmtDuration(lateMax)}.`);
-    else if(earlyMax>lateMax*1.15) insights.push(`Her longest recorded sleep decreased from about ${fmtDuration(earlyMax)} earlier this week to ${fmtDuration(lateMax)}.`);
-  }
-  const nappies7 = state.nappies.filter(n=>new Date(n.date).getTime()>=cutoff7);
-  if(nappies7.length>=5){
-    let wet=0; nappies7.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet++; });
-    insights.push(`Average wet nappies over the last 7 days: about ${(wet/7).toFixed(1)} per day.`);
-  }
-  const bf3 = state.feeds.map(normalizeFeed).filter(f=>f.type==='breastfeeding' && new Date(f.date).getTime()>=cutoff3);
-  if(bf3.length>=3){
-    const totalLeft=bf3.reduce((s,f)=>s+(f.leftMins||0),0), totalRight=bf3.reduce((s,f)=>s+(f.rightMins||0),0);
-    const total=totalLeft+totalRight;
-    if(total>0){
-      const leftShare=totalLeft/total;
-      if(leftShare>=0.4 && leftShare<=0.6) insights.push(`Breastfeeding has been fairly balanced between left and right over the last 3 days.`);
-      else insights.push(`Breastfeeding has leaned toward the ${leftShare>0.6?'left':'right'} side over the last 3 days (about ${Math.round(Math.max(leftShare,1-leftShare)*100)}%).`);
-    }
-  }
-  return insights;
+  });
+  if(daysWithEnough<5 || eveningGaps.length<5 || dayGaps.length<5) return null;
+  const avgEvening = eveningGaps.reduce((a,b)=>a+b,0)/eveningGaps.length;
+  const avgDay = dayGaps.reduce((a,b)=>a+b,0)/dayGaps.length;
+  if(avgDay-avgEvening<20) return null;
+  return mkInsight({
+    id:'pattern-evening-feed', type:'pattern', domain:'feed',
+    title:'Evening feeds cluster together',
+    body:`On ${daysWithEnough} sufficiently logged days, feeds between 6–10pm were typically ${fmtDuration(avgEvening)} apart, compared with ${fmtDuration(avgDay)} during the rest of the day.`,
+    importance: 42,
+    evidence: { current: [{label:'Evening avg gap', value:fmtDuration(avgEvening)}, {label:'Rest-of-day avg gap', value:fmtDuration(avgDay)}] }
+  });
+}
+/* --- Relationship: does a longer sleep tend to follow the last evening feed? Observed association only. --- */
+function insightRelationshipFeedSleep(){
+  const keys = daysAgoKeys(8);
+  let matches=0, total=0, gaps=[];
+  keys.forEach(dayKey=>{
+    const feeds = state.feeds.map(normalizeFeed).filter(f=>f.type!=='pumping' && sydDateKey(f.date)===dayKey);
+    const evening = feeds.filter(f=>{ const h=parseInt(sydDateParts(f.date).hour,10); return h>=17; }).sort((a,b)=>new Date(a.date)-new Date(b.date));
+    if(!evening.length) return;
+    const lastFeedTime = new Date(evening[evening.length-1].date).getTime();
+    const candidates = state.sleeps.filter(s=> (s.mins||0)>=90 && new Date(s.date).getTime()>lastFeedTime && new Date(s.date).getTime()<lastFeedTime+4*3600000);
+    if(!candidates.length) return;
+    total++;
+    const sleep = candidates.sort((a,b)=>new Date(a.date)-new Date(b.date))[0];
+    const gapMin = (new Date(sleep.date).getTime()-lastFeedTime)/60000;
+    if(gapMin>=15 && gapMin<=70){ matches++; gaps.push(gapMin); }
+  });
+  if(total<5 || matches<4) return null;
+  return mkInsight({
+    id:'relationship-feed-sleep', type:'relationship', domain:'cross',
+    title:'Possible feed/sleep pattern',
+    body:`On ${matches} of the last ${total} sufficiently logged evenings, her first longer sleep stretch followed the final evening feed within roughly ${Math.round(Math.min(...gaps))}–${Math.round(Math.max(...gaps))} minutes. This is an observed association only — it doesn't mean the feed causes the longer sleep.`,
+    importance: 48,
+    evidence: { current: gaps.map((g,i)=>({label:`Evening ${i+1}`, value:Math.round(g)+' min later'})) }
+  });
+}
+/* --- Milestone: a genuine new personal record, surfaced only when recent and rare --- */
+function insightMilestoneSleep(){
+  const sorted = state.sleeps.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(sorted.length<6) return null;
+  const last = sorted[sorted.length-1];
+  if((Date.now()-new Date(last.date).getTime()) > 26*3600000) return null;
+  const priorMax = sorted.slice(0,-1).reduce((mx,s)=>Math.max(mx,s.mins||0),0);
+  if(priorMax<=0 || (last.mins||0)<=priorMax) return null;
+  return mkInsight({
+    id:'milestone-sleep-longest', type:'milestone', domain:'sleep',
+    title:'Longest sleep yet',
+    body:`${fmtDuration(last.mins)} — her previous longest recorded sleep was ${fmtDuration(priorMax)}.`,
+    importance: 58,
+    evidence: { current:[{label:'New longest', value:fmtDuration(last.mins)}], comparison:[{label:'Previous longest', value:fmtDuration(priorMax)}] }
+  });
+}
+/* --- Today deviations from her personal baseline, reusing the existing baseline system --- */
+function todayDeviationCandidates(){
+  const result = generateBaselineInsights();
+  if(result.insufficient) return [];
+  return result.insights.map((text,i)=> mkInsight({ id:'today-deviation-'+i, type:'change', domain:'today', title:'A little different today', body:text, importance:65, evidence:null }));
+}
+function insightStableFallback(){
+  const b = baselineStats(7);
+  if(!b) return null;
+  return mkInsight({ id:'stable-summary', type:'consistency', domain:'cross', title:'No meaningful changes this week', body:`Her recent sleep, feeding and nappy patterns are broadly similar to the previous comparable period.`, importance:5, evidence:null });
+}
+/* Runs every generator, keeps only real candidates, ranks by importance,
+   returns the top 2–4. Falls back to an explicit "nothing's changed" rather
+   than manufacturing something to fill the space. */
+function generateSmartInsights(){
+  const candidates = [
+    insightChangeSleepStretch(), insightChangeFeedFrequency(), insightConsistencyNappy(),
+    insightRhythmSleepTiming(), insightPatternEveningFeeds(), insightRelationshipFeedSleep(),
+    insightMilestoneSleep(), ...todayDeviationCandidates()
+  ].filter(Boolean);
+  candidates.sort((a,b)=>b.importance-a.importance);
+  let top = candidates.slice(0,4);
+  if(!top.length){ const fb = insightStableFallback(); if(fb) top=[fb]; }
+  return top;
+}
+let expandedInsightIds = new Set();
+function renderInsightCard(ins, index){
+  const expanded = expandedInsightIds.has(ins.id);
+  const typeLabel = {change:'Change', pattern:'Pattern', rhythm:'Rhythm', relationship:'Possible link', consistency:'Steady', milestone:'Milestone'}[ins.type] || '';
+  return `
+    <div class="insight-card" style="${index===0?'':'margin-top:10px;'}">
+      <div style="display:flex;align-items:center;gap:7px;">
+        <span class="chip ${ins.type==='milestone'?'given':'due'}" style="text-transform:none;">${typeLabel}</span>
+        <div style="font-weight:800;font-size:${index===0?'14.5px':'13.5px'};color:var(--ink);">${escapeHtml(ins.title)}</div>
+      </div>
+      <div class="support-text" style="margin-top:5px;">${ins.body}</div>
+      ${ins.evidence ? `
+        <button class="ql-link" data-insighttoggle="${ins.id}" style="padding:6px 0 0;">${expanded?'Hide data':'Why am I seeing this?'}</button>
+        ${expanded ? `
+          <div class="surface-group" style="margin-top:6px;padding:10px 12px;">
+            ${ins.evidence.current ? `<div class="meta-text" style="font-weight:700;">Recent</div>${ins.evidence.current.map(e=>`<div class="rline">${escapeHtml(e.label)}: ${escapeHtml(e.value)}</div>`).join('')}` : ''}
+            ${ins.evidence.comparison ? `<div class="meta-text" style="font-weight:700;margin-top:6px;">Previous comparable period</div>${ins.evidence.comparison.map(e=>`<div class="rline">${escapeHtml(e.label)}: ${escapeHtml(e.value)}</div>`).join('')}` : ''}
+          </div>
+        ` : ''}
+      ` : ''}
+    </div>
+  `;
+}
+function bindInsightCards(){
+  document.querySelectorAll('[data-insighttoggle]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.dataset.insighttoggle;
+      if(expandedInsightIds.has(id)) expandedInsightIds.delete(id); else expandedInsightIds.add(id);
+      renderMain();
+    });
+  });
 }
 
 /* ---------------- Personal baseline ("what's normal for THIS baby") ---------------- */
@@ -3261,9 +3541,8 @@ function renderCare(){
   const last24 = nappyCounts24h();
   const ds = dailySummary();
   const ws = weeklySummary();
-  const insights = generateInsights();
+  const smartInsights = generateSmartInsights();
   const baselineResult = generateBaselineInsights();
-  const combinedInsights = (baselineResult.insufficient ? [] : baselineResult.insights).concat(insights);
   const baselineForToday = baselineResult.insufficient ? null : baselineResult.baseline;
   return `
     <div class="hero">
@@ -3286,7 +3565,7 @@ function renderCare(){
 
     <div class="card">
       <h2>Insights</h2>
-      ${combinedInsights.length ? combinedInsights.map(i=>`<div class="insight-item">${i}</div>`).join('') : `<div class="empty">Not enough data for insights yet.<br>Keep logging and patterns will appear here.</div>`}
+      ${smartInsights.length ? smartInsights.map((ins,i)=>renderInsightCard(ins,i)).join('') : `<div class="empty">Not enough data for insights yet.<br>Keep logging and patterns will appear here.</div>`}
     </div>
 
     <div class="card">
@@ -3323,6 +3602,7 @@ function bindCare(){
   const back = document.getElementById('careBack');
   if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
   bindWeekRhythm();
+  bindInsightCards();
   bindDeletes();
 }
 
@@ -3339,6 +3619,8 @@ function renderTimeline(){
   });
   const todayKey = sydDateKey();
   const yestKey = sydDateKey(Date.now()-86400000);
+  const up = (timelineFilter==='all' || timelineFilter==='health') ? upcomingItems() : {appts:[], vaccines:[]};
+  const hasUpcoming = up.appts.length || up.vaccines.length;
   return `
     <div class="hero">
       <button id="timelineBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
@@ -3347,6 +3629,12 @@ function renderTimeline(){
     <div class="tabs" id="timelineFilters">
       ${filters.map(f=>`<button data-tf="${f}" class="${timelineFilter===f?'active':''}">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`).join('')}
     </div>
+    ${hasUpcoming ? `
+    <div class="section-header">Upcoming</div>
+    ${up.appts.map(a=>`<div class="row-item"><div class="main" style="font-weight:600;display:flex;align-items:center;gap:7px;">${icon('calendar',15)}${escapeHtml(a.title)}</div><div class="meta-text">${daysUntilLabel(a.date)}</div></div>`).join('')}
+    ${up.vaccines.slice(0,3).map(v=>`<div class="row-item"><div class="main" style="font-weight:600;display:flex;align-items:center;gap:7px;">${icon('shield',15)}${escapeHtml(v.name)}</div><div class="meta-text">Due around ${v.dueMonths} mo</div></div>`).join('')}
+    <div class="section-header" style="margin-top:22px;">History</div>
+    ` : ''}
     ${order.length ? order.map(dk=>`
       <div class="tl-day">${dk===todayKey?'Today':dk===yestKey?'Yesterday':new Date(dk+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric',timeZone:APP_TZ})}</div>
       <div class="tl-group">
