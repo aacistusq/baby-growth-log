@@ -1392,6 +1392,7 @@ function renderMain(){
   else if(currentView==='settings') { main.innerHTML = renderSettings(); bindSettings(); }
   else if(currentView==='rhythm') { main.innerHTML = renderRhythmView(); bindRhythmView(); }
   else if(currentView==='brief') { main.innerHTML = renderDailyBrief(); bindDailyBrief(); }
+  else if(currentView==='recap') { main.innerHTML = renderMonthlyRecap(); bindMonthlyRecap(); }
   else if(currentView==='ask') { main.innerHTML = renderAskView(); bindAskView(); }
   if(sheetOpen) renderSheet();
 }
@@ -3647,42 +3648,103 @@ function executeAskIntent(intent){
     default: return executeUnknown();
   }
 }
-async function classifyAskIntent(question){
-  const todayStr = sydDateKey();
-  const todayDayName = new Date().toLocaleDateString(undefined,{weekday:'long', timeZone:APP_TZ});
-  const prompt = `You are a query classifier for a baby tracker app called "Ask Keshavi". Convert the user's natural-language question about their baby's logged data into a structured JSON query. Do NOT answer the question or calculate anything yourself — only classify intent and extract parameters. Today's date is ${todayStr} (${todayDayName}). The baby's name is ${state.profile.name}.
+const MONTH_NAMES_ASK = {january:0,february:1,march:2,april:3,may:4,june:5,july:6,august:7,september:8,october:9,november:10,december:11,
+  jan:0,feb:1,mar:2,apr:3,jun:5,jul:6,aug:7,sep:8,sept:8,oct:9,nov:10,dec:11};
+function parseAskDate(s){
+  let m = s.match(/\b(\d{1,2})(?:st|nd|rd|th)?\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/i);
+  if(!m) m = s.match(/\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i);
+  if(!m) return null;
+  let day, monthName;
+  if(/^\d/.test(m[1])){ day=parseInt(m[1],10); monthName=m[2]; } else { monthName=m[1]; day=parseInt(m[2],10); }
+  const monthIdx = MONTH_NAMES_ASK[monthName.toLowerCase()];
+  if(monthIdx==null || day<1 || day>31) return null;
+  let year = new Date().getFullYear();
+  const candidate = new Date(Date.UTC(year, monthIdx, day, 12));
+  if(candidate.getTime() > Date.now()) year -= 1; // assume last year if the date hasn't happened yet this year
+  return `${year}-${String(monthIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function detectAskRange(s){
+  if(/\byesterday\b/.test(s)) return {kind:'yesterday'};
+  if(/\blast\s*24\s*hours?\b/.test(s)) return {kind:'last24h'};
+  if(/\blast\s*week\b/.test(s)) return {kind:'lastWeek'};
+  if(/\bthis\s*week\b/.test(s)) return {kind:'thisWeek'};
+  if(/\btoday\b/.test(s)) return {kind:'today'};
+  const d = parseAskDate(s);
+  if(d) return {kind:'date', date:d};
+  return null;
+}
+function detectTimeOfDay(s){
+  if(/\bovernight\b/.test(s)) return 'overnight';
+  if(/\bmorning\b/.test(s)) return 'morning';
+  if(/\bafternoon\b/.test(s)) return 'afternoon';
+  if(/\bevening\b/.test(s)) return 'evening';
+  return null;
+}
+/* Fully local, deterministic intent classifier — no network call, no model in
+   the loop at all. Pattern-matches the question into the same strict intent
+   shapes the executors below expect. Covers the app's known question types;
+   anything it can't confidently match falls through to "unknown" rather than
+   guessing. */
+function classifyAskIntentLocal(question){
+  const s = question.toLowerCase().trim();
 
-Respond with ONLY a single JSON object, no markdown formatting, no explanation, matching exactly one of these shapes:
+  if(/\bcompar\w*\b.*\bweek\b/.test(s) || (/\bthis week\b/.test(s) && /\blast week\b/.test(s))) return {type:'weekCompare'};
 
-{"type":"lastEvent","metric":"nappy|feed|sleep|temperature|measurement|vaccine|appointment|moment","subtype":"wet|dirty|breastfeeding|expressed|formula|pumping|weight|length|hc|null"}
-{"type":"countInRange","metric":"nappy|feed|sleep","subtype":"wet|dirty|breastfeeding|expressed|formula|null","range":{"kind":"today|yesterday|last24h|thisWeek|lastWeek|date","date":"YYYY-MM-DD or null"},"timeOfDay":"overnight|morning|afternoon|evening|null"}
-{"type":"totalInRange","metric":"sleep|feed","range":{"kind":"...","date":"..."}}
-{"type":"maxInRange","metric":"sleep|feed","range":{"kind":"...","date":"..."}}
-{"type":"bestDay","metric":"feed|sleep|nappy"}
-{"type":"growthChange","measure":"weight|length|hc"}
-{"type":"weekCompare"}
-{"type":"dayShowAll","date":"YYYY-MM-DD"}
-{"type":"unanswerable"}
-{"type":"unknown"}
+  if(/\b(weight|grown|growth|length|height|head)\b.*\b(chang|since birth|from birth)\b/.test(s)){
+    let measure='weight';
+    if(/\blength|height\b/.test(s)) measure='length';
+    else if(/\bhead\b/.test(s)) measure='hc';
+    return {type:'growthChange', measure};
+  }
 
-Rules:
-- Use "unanswerable" for any question asking for a medical/diagnostic judgement (feeding adequacy, reflux, dehydration, illness, whether something is "normal", overtiredness, low supply, allergies, etc). Never attempt to answer these.
-- Use "unknown" if the question doesn't relate to tracked baby data (feeds, sleep, nappies, growth, temperature, vaccines, appointments, moments) or you can't confidently classify it.
-- Resolve relative dates/ranges ("yesterday", "this week", "12 August") into actual values using today's date above.
-- Respond with ONLY the JSON object and nothing else — no markdown code fences, no commentary.
+  if(/\bwhich day\b|\bbusiest day\b|\bmost (feeds|sleep|nappies|nappy changes)\b/.test(s)){
+    let metric='feed';
+    if(/\bsleep\b/.test(s)) metric='sleep';
+    else if(/\bnapp(y|ies)\b/.test(s)) metric='nappy';
+    return {type:'bestDay', metric};
+  }
 
-Question: "${question}"`;
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:300, messages:[{role:"user", content:prompt}] })
-  });
-  if(!response.ok) throw new Error('API request failed: '+response.status);
-  const data = await response.json();
-  const textBlock = (data.content||[]).find(b=>b.type==='text');
-  if(!textBlock) throw new Error('No text response');
-  let raw = textBlock.text.trim().replace(/^```json\s*/i,'').replace(/^```\s*/,'').replace(/```\s*$/,'').trim();
-  return JSON.parse(raw);
+  if(/\blongest\b.*\bsleep\b|\bmax\w*\b.*\bsleep\b/.test(s)){
+    return {type:'maxInRange', metric:'sleep', range: detectAskRange(s) || {kind:'thisWeek'}};
+  }
+
+  if(/\beverything\b|\bwhat happened\b/.test(s)){
+    const d = parseAskDate(s);
+    if(d) return {type:'dayShowAll', date:d};
+  }
+
+  if(/\bhow many\b/.test(s)){
+    const timeOfDay = detectTimeOfDay(s);
+    const range = detectAskRange(s) || {kind:'last24h'};
+    if(/\bwet\b/.test(s)) return {type:'countInRange', metric:'nappy', subtype:'wet', range};
+    if(/\bdirty\b|\bpoo\b/.test(s)) return {type:'countInRange', metric:'nappy', subtype:'dirty', range};
+    if(/\bnapp(y|ies)\b/.test(s)) return {type:'countInRange', metric:'nappy', range};
+    if(/\bfeed\w*\b|\btimes\b/.test(s)) return {type:'countInRange', metric:'feed', range, timeOfDay};
+    if(/\bsleep\w*\b/.test(s)) return {type:'countInRange', metric:'sleep', range};
+  }
+
+  if(/\bhow much\b.*\bsleep\b/.test(s)) return {type:'totalInRange', metric:'sleep', range: detectAskRange(s) || {kind:'yesterday'}};
+  if(/\bhow much\b.*\b(feed|nurs)\w*\b/.test(s)) return {type:'totalInRange', metric:'feed', range: detectAskRange(s) || {kind:'today'}};
+
+  /* "last"/"latest" here means "most recent single event" — guarded against
+     "how many"/"how much" phrasing above, since "in the last 24 hours" would
+     otherwise be misread as a single-event lookup rather than a count. */
+  if(/\b(last|latest)\b/.test(s) || /^when\b/.test(s)){
+    if(/\b(poo|dirty|stool|bowel)\b/.test(s)) return {type:'lastEvent', metric:'nappy', subtype:'dirty'};
+    if(/\bwet\b.*nappy|\bwee\b|\bpee\b/.test(s)) return {type:'lastEvent', metric:'nappy', subtype:'wet'};
+    if(/\bnapp(y|ies)\b/.test(s)) return {type:'lastEvent', metric:'nappy'};
+    if(/\btemp(erature)?\b/.test(s)) return {type:'lastEvent', metric:'temperature'};
+    if(/\bweigh(t|ed|-in)?\b/.test(s)) return {type:'lastEvent', metric:'measurement', subtype:'weight'};
+    if(/\blength\b/.test(s)) return {type:'lastEvent', metric:'measurement', subtype:'length'};
+    if(/\bhead\b/.test(s)) return {type:'lastEvent', metric:'measurement', subtype:'hc'};
+    if(/\b(vaccin|shot|jab|immunis)\w*\b/.test(s)) return {type:'lastEvent', metric:'vaccine'};
+    if(/\bappointment\b/.test(s)) return {type:'lastEvent', metric:'appointment'};
+    if(/\bmoment\b/.test(s)) return {type:'lastEvent', metric:'moment'};
+    if(/\b(feed|fed|nurs|eat|ate|breastfe|bottle)\w*\b/.test(s)) return {type:'lastEvent', metric:'feed'};
+    if(/\b(sleep|slept|nap|wake|woke)\w*\b/.test(s)) return {type:'lastEvent', metric:'sleep'};
+  }
+
+  return {type:'unknown'};
 }
 const ASK_EXAMPLES = [
   'When did she last poo?',
@@ -3692,29 +3754,28 @@ const ASK_EXAMPLES = [
   'How has her weight changed since birth?',
   'Compare this week with last week'
 ];
-let askQuestion = '', askLoading = false, askAnswer = null, askEvidence = null, askEvidenceExpanded = false, askError = null;
+let askQuestion = '', askAnswer = null, askEvidence = null, askEvidenceExpanded = false, askError = null;
 let askHistory = [];
-async function handleAskSubmit(question){
+function handleAskSubmit(question){
   question = (question||'').trim();
   if(!question) return;
-  askLoading = true; askError = null; askAnswer = null; askEvidence = null; askEvidenceExpanded = false;
-  renderMain();
+  askError = null; askAnswer = null; askEvidence = null; askEvidenceExpanded = false;
   if(looksLikeMedicalQuestion(question)){
     const r = executeUnanswerable();
-    askLoading=false; askAnswer=r.answer; askEvidence=r.evidence;
+    askAnswer=r.answer; askEvidence=r.evidence;
     askHistory.unshift({q:question, a:r.answer});
     renderMain();
     return;
   }
   try{
-    const intentRaw = await classifyAskIntent(question);
+    const intentRaw = classifyAskIntentLocal(question);
     const intent = (intentRaw && ASK_KNOWN_TYPES.includes(intentRaw.type)) ? intentRaw : {type:'unknown'};
     const r = executeAskIntent(intent);
-    askLoading=false; askAnswer=r.answer; askEvidence=r.evidence;
+    askAnswer=r.answer; askEvidence=r.evidence;
     askHistory.unshift({q:question, a:r.answer});
   }catch(e){
     console.error('Ask Keshavi failed', e);
-    askLoading=false; askError="Couldn't reach the assistant — check your connection and try again.";
+    askError="Something went wrong answering that — try rephrasing the question.";
   }
   renderMain();
 }
@@ -3725,9 +3786,9 @@ function renderAskView(){
       <h1>Ask ${escapeHtml(state.profile.name)}</h1><p>Ask a question about her logged history.</p>
     </div>
     <input type="text" id="askInput" placeholder="e.g. How much did she sleep yesterday?" value="${escapeHtml(askQuestion)}">
-    <button class="btn" id="askSubmitBtn" style="margin-top:10px;" ${askLoading?'disabled':''}>${askLoading?'Thinking…':'Ask'}</button>
+    <button class="btn" id="askSubmitBtn" style="margin-top:10px;">Ask</button>
 
-    ${!askAnswer && !askLoading && !askError ? `
+    ${!askAnswer && !askError ? `
     <div class="section-header" style="margin-top:20px;">Try asking</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;">
       ${ASK_EXAMPLES.map(q=>`<button class="chip due" data-askexample="${escapeHtml(q)}" style="text-transform:none;cursor:pointer;border:none;">${escapeHtml(q)}</button>`).join('')}
@@ -4154,6 +4215,187 @@ function bindDailyBrief(){
   const back = document.getElementById('briefBack');
   if(back) back.addEventListener('click', ()=>{ currentView='care'; render(); });
 }
+/* ---------------- Monthly Recap: a factual journal entry per calendar month,
+   bridging the clinical (growth, care, health) and the emotional (Moments) —
+   entirely derived from existing records, nothing new to log. ---------------- */
+let recapYearMonth = null;
+function currentYearMonth(){ const p = sydDateParts(); return `${p.year}-${p.month}`; }
+function monthLabel(yearMonth){
+  const [y,m] = yearMonth.split('-').map(Number);
+  return new Date(y, m-1, 1).toLocaleDateString(undefined,{month:'long', year:'numeric'});
+}
+function shiftYearMonth(yearMonth, delta){
+  let [y,m] = yearMonth.split('-').map(Number);
+  m += delta;
+  while(m<1){ m+=12; y--; }
+  while(m>12){ m-=12; y++; }
+  return `${y}-${String(m).padStart(2,'0')}`;
+}
+function monthBoundsMs(yearMonth){
+  const [y,m] = yearMonth.split('-').map(Number);
+  const start = sydMidnightUTC(`${y}-${String(m).padStart(2,'0')}-01`);
+  const nextKey = m===12 ? `${y+1}-01-01` : `${y}-${String(m+1).padStart(2,'0')}-01`;
+  return { start, end: sydMidnightUTC(nextKey) };
+}
+function getMonthDayKeys(yearMonth){
+  const [y,m] = yearMonth.split('-').map(Number);
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const keys = [];
+  for(let d=1; d<=daysInMonth; d++) keys.push(`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+  return keys;
+}
+function computeMonthAgeNote(yearMonth){
+  const {start, end} = monthBoundsMs(yearMonth);
+  const ageAtStart = ageAtDate(state.profile.birthDate, new Date(start).toISOString()).months;
+  const ageAtEnd = ageAtDate(state.profile.birthDate, new Date(end-1).toISOString()).months;
+  if(ageAtEnd > ageAtStart) return `Turned ${ageAtEnd} month${ageAtEnd===1?'':'s'} old this month`;
+  return null;
+}
+function computeMonthGrowth(yearMonth, type){
+  const {start, end} = monthBoundsMs(yearMonth);
+  const all = state.measurements.filter(x=>x.type===type).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const inMonth = all.filter(x=>{ const t=new Date(x.date).getTime(); return t>=start && t<end; });
+  if(!inMonth.length) return null;
+  const beforeMonth = all.filter(x=> new Date(x.date).getTime() < start);
+  const first = inMonth[0], latest = inMonth[inMonth.length-1];
+  const priorRef = beforeMonth.length ? beforeMonth[beforeMonth.length-1] : null;
+  const ageM = ageMonthsDecimal(state.profile.birthDate, latest.date);
+  const row = interpolateRow(TYPE_TO_TABLE[type], ageM);
+  const score = Math.round(percentileScore(row, latest.value));
+  return {
+    first, latest, count: inMonth.length,
+    changeInMonth: inMonth.length>=2 ? latest.value-first.value : null,
+    changeFromPrior: priorRef ? latest.value-priorRef.value : null,
+    percentile: score
+  };
+}
+function computeMonthCare(yearMonth){
+  const dayKeys = getMonthDayKeys(yearMonth);
+  const todayKey = sydDateKey();
+  const feedBuckets = buildFeedWeek(dayKeys), sleepBuckets = buildSleepWeek(dayKeys), nappyBuckets = buildNappyWeek(dayKeys);
+  const avgFeeds = weekAverageExcludingToday(feedBuckets, 'babyFeedCount', todayKey);
+  const avgSleep = weekAverageExcludingToday(sleepBuckets, 'totalMin', todayKey);
+  const avgWet = weekAverageExcludingToday(nappyBuckets, 'wetOut', todayKey);
+  const avgDirty = weekAverageExcludingToday(nappyBuckets, 'dirtyOut', todayKey);
+  const longestSleepStretch = sleepBuckets.reduce((mx,b)=>Math.max(mx,b.longest||0),0);
+  let longestSleepDay = null;
+  sleepBuckets.forEach(b=>{ if(longestSleepStretch>0 && b.longest===longestSleepStretch) longestSleepDay=b.dayKey; });
+  const loggedFeedDays = feedBuckets.filter(b=>b.hasData);
+  const busiestFeedDay = loggedFeedDays.length ? loggedFeedDays.reduce((mx,b)=> b.babyFeedCount>(mx?mx.babyFeedCount:-1)?b:mx, null) : null;
+  return { avgFeeds, avgSleep, avgWet, avgDirty, longestSleepStretch, longestSleepDay, busiestFeedDay,
+    hasAnyData: feedBuckets.some(b=>b.hasData) || sleepBuckets.some(b=>b.hasData) || nappyBuckets.some(b=>b.hasData) };
+}
+function computeMonthHealth(yearMonth){
+  const {start, end} = monthBoundsMs(yearMonth);
+  const inRange = d => { const t=new Date(d).getTime(); return t>=start && t<end; };
+  const apptsCompleted = state.appointments.filter(a=>a.status==='completed' && inRange(a.date));
+  const vaccinesGiven = state.vaccines.filter(v=>v.givenDate && inRange(v.givenDate));
+  const tempsInMonth = state.temperatures.filter(t=>inRange(t.date));
+  const highTempsCount = tempsInMonth.filter(t=>t.tempC>=38.0).length;
+  return { apptsCompleted, vaccinesGiven, tempsCount: tempsInMonth.length, highTempsCount };
+}
+function computeMonthMoments(yearMonth){
+  const {start, end} = monthBoundsMs(yearMonth);
+  return state.milestones.filter(m=>{ const t=new Date(m.date).getTime(); return t>=start && t<end; }).sort((a,b)=>new Date(a.date)-new Date(b.date));
+}
+function computeMonthComparison(yearMonth){
+  const curKeys = getMonthDayKeys(yearMonth), prevKeys = getMonthDayKeys(shiftYearMonth(yearMonth,-1));
+  const todayKey = sydDateKey();
+  const parts = [];
+  [['sleep','totalMin',buildSleepWeek],['feed','babyFeedCount',buildFeedWeek],['nappy','wetOut',buildNappyWeek]].forEach(([label,key,builder])=>{
+    const curB = builder(curKeys).filter(b=>b.dayKey!==todayKey && b.hasData);
+    const prevB = builder(prevKeys).filter(b=>b.hasData);
+    if(curB.length<5 || prevB.length<5) return;
+    const curAvg = curB.reduce((s,b)=>s+b[key],0)/curB.length;
+    const prevAvg = prevB.reduce((s,b)=>s+b[key],0)/prevB.length;
+    const diff = curAvg-prevAvg;
+    if(label==='sleep' && Math.abs(diff)>=30) parts.push(`Average daily sleep ${diff>0?'increased':'decreased'} from ${fmtDuration(prevAvg)} to ${fmtDuration(curAvg)} compared with the previous month.`);
+    if(label==='feed' && Math.abs(diff)>=1.0) parts.push(`Feeding frequency ${diff>0?'increased':'decreased'} from ${prevAvg.toFixed(1)}/day to ${curAvg.toFixed(1)}/day compared with the previous month.`);
+    if(label==='nappy' && Math.abs(diff)>=1.0) parts.push(`Wet nappies ${diff>0?'increased':'decreased'} from ${prevAvg.toFixed(1)}/day to ${curAvg.toFixed(1)}/day compared with the previous month.`);
+  });
+  return parts;
+}
+function renderMonthlyRecap(){
+  const ym = recapYearMonth || currentYearMonth();
+  const isCurrentMonth = ym===currentYearMonth();
+  const ageNote = computeMonthAgeNote(ym);
+  const weightData = computeMonthGrowth(ym,'weight');
+  const lengthData = computeMonthGrowth(ym,'length');
+  const hcData = computeMonthGrowth(ym,'hc');
+  const care = computeMonthCare(ym);
+  const health = computeMonthHealth(ym);
+  const moments = computeMonthMoments(ym);
+  const comparisonParts = computeMonthComparison(ym);
+
+  return `
+    <div class="hero">
+      <button id="recapBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Care</button>
+      <h1>${monthLabel(ym)}</h1>
+      <p>${ageNote || `${escapeHtml(state.profile.name)}'s month in review`}${isCurrentMonth?' · still in progress':''}</p>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px;">
+      <button class="ql-link" id="recapPrevBtn" style="padding:4px 0;">‹ ${monthLabel(shiftYearMonth(ym,-1))}</button>
+      ${!isCurrentMonth ? `<button class="ql-link" id="recapNextBtn" style="padding:4px 0;">${monthLabel(shiftYearMonth(ym,1))} ›</button>` : ''}
+    </div>
+
+    <div class="card">
+      <h2>Growth</h2>
+      ${weightData ? `
+        <div class="rline">Weight: ${weightData.first.value} kg${weightData.count>1?` → ${weightData.latest.value} kg`:''} this month${weightData.changeInMonth!=null?` (${weightData.changeInMonth>=0?'+':''}${weightData.changeInMonth.toFixed(2)} kg)`:''}</div>
+        <div class="rline">Around the ${ordinalSuffix(weightData.percentile)} percentile at latest measurement</div>
+        ${weightData.changeFromPrior!=null && weightData.count===1 ? `<div class="rline">${weightData.changeFromPrior>=0?'+':''}${weightData.changeFromPrior.toFixed(2)} kg since the end of last month</div>` : ''}
+      ` : `<div class="empty">No weight measurements logged this month.</div>`}
+      ${lengthData ? `<div class="rline">Length: ${lengthData.latest.value} cm</div>` : ''}
+      ${hcData ? `<div class="rline">Head circumference: ${hcData.latest.value} cm</div>` : ''}
+    </div>
+
+    <div class="card">
+      <h2>Care</h2>
+      ${care.hasAnyData ? `
+        ${care.avgFeeds!=null ? `<div class="rline">Average ${care.avgFeeds.toFixed(1)} feeds/day on logged days</div>` : ''}
+        ${care.avgSleep!=null ? `<div class="rline">Average ${fmtDuration(care.avgSleep)} sleep/day</div>` : ''}
+        ${care.longestSleepStretch ? `<div class="rline">Longest single sleep: ${fmtDuration(care.longestSleepStretch)}${care.longestSleepDay?` (${new Date(care.longestSleepDay+'T12:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short',timeZone:APP_TZ})})`:''}</div>` : ''}
+        ${care.busiestFeedDay ? `<div class="rline">Most active feeding day: ${new Date(care.busiestFeedDay.dayKey+'T12:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short',timeZone:APP_TZ})} (${care.busiestFeedDay.babyFeedCount} feeds)</div>` : ''}
+        ${care.avgWet!=null ? `<div class="rline">Nappies: ${care.avgWet.toFixed(1)} wet / ${care.avgDirty.toFixed(1)} dirty per day</div>` : ''}
+      ` : `<div class="empty">Not enough logged days this month for care averages.</div>`}
+    </div>
+
+    ${(health.apptsCompleted.length || health.vaccinesGiven.length || health.tempsCount) ? `
+    <div class="card">
+      <h2>Health</h2>
+      ${health.apptsCompleted.length ? `<div class="rline">${health.apptsCompleted.length} appointment${health.apptsCompleted.length===1?'':'s'} completed: ${health.apptsCompleted.map(a=>escapeHtml(a.title)).join(', ')}</div>` : ''}
+      ${health.vaccinesGiven.length ? `<div class="rline">${health.vaccinesGiven.length} vaccine${health.vaccinesGiven.length===1?'':'s'} given: ${health.vaccinesGiven.map(v=>escapeHtml(v.name)).join(', ')}</div>` : ''}
+      ${health.tempsCount ? `<div class="rline">${health.tempsCount} temperature reading${health.tempsCount===1?'':'s'} logged${health.highTempsCount?` (${health.highTempsCount} at or above 38°C)`:''}</div>` : ''}
+    </div>` : ''}
+
+    ${moments.length ? `
+    <div class="section-header">Moments</div>
+    <div class="gallery-grid">
+      ${moments.slice(0,6).map(m=>`
+        <div class="gallery-card" data-viewmoment="${m.id}" style="cursor:pointer;">
+          ${m.photo ? `<img src="${m.photo}" alt="">` : `<div class="ph">⭐</div>`}
+          <div class="cap"><div class="t">${escapeHtml(m.title)}</div><div class="s">${fmtDate(m.date)}</div></div>
+        </div>`).join('')}
+    </div>` : ''}
+
+    ${comparisonParts.length ? `
+    <div class="card" style="margin-top:16px;">
+      <h2>Notable patterns</h2>
+      ${comparisonParts.map(p=>`<div class="insight-item">${p}</div>`).join('')}
+    </div>` : ''}
+  `;
+}
+function bindMonthlyRecap(){
+  const back = document.getElementById('recapBack');
+  if(back) back.addEventListener('click', ()=>{ currentView='care'; render(); });
+  const prevBtn = document.getElementById('recapPrevBtn');
+  if(prevBtn) prevBtn.addEventListener('click', ()=>{ recapYearMonth = shiftYearMonth(recapYearMonth||currentYearMonth(), -1); renderMain(); });
+  const nextBtn = document.getElementById('recapNextBtn');
+  if(nextBtn) nextBtn.addEventListener('click', ()=>{ recapYearMonth = shiftYearMonth(recapYearMonth||currentYearMonth(), 1); renderMain(); });
+  document.querySelectorAll('[data-viewmoment]').forEach(el=>{
+    el.addEventListener('click', ()=> openMomentViewer(el.dataset.viewmoment));
+  });
+}
 function careBackHeader(title){
   return `<div class="hero"><button class="careBack2" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Care</button><h1>${title}</h1></div>`;
 }
@@ -4179,6 +4421,10 @@ function renderCareOverview(){
     <div class="row-item" id="goBriefLink" style="cursor:pointer;">
       <div class="main" style="font-weight:600;">Daily brief</div>
       <div class="meta-text">Last 24 hours →</div>
+    </div>
+    <div class="row-item" id="goRecapLink" style="cursor:pointer;">
+      <div class="main" style="font-weight:600;">Monthly recap</div>
+      <div class="meta-text">${monthLabel(currentYearMonth())} →</div>
     </div>
 
     ${renderBaselineCard()}
@@ -4278,6 +4524,8 @@ function bindCare(){
   if(grl) grl.addEventListener('click', ()=> openRhythmView(sydDateKey(), 'care'));
   const gbl = document.getElementById('goBriefLink');
   if(gbl) gbl.addEventListener('click', ()=>{ currentView='brief'; render(); });
+  const grcl = document.getElementById('goRecapLink');
+  if(grcl) grcl.addEventListener('click', ()=>{ recapYearMonth=null; currentView='recap'; render(); });
   bindWeekRhythm();
   bindInsightCards();
   bindDeletes();
