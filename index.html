@@ -377,6 +377,8 @@
   }
   .ql-item:active{ background:var(--surface-muted); }
   .ql-item svg{ stroke:var(--lavender-deep); width:22px; height:22px; }
+  .ql-item-active{ background:var(--status-positive-bg); border-radius:var(--radius-control); }
+  .ql-item-active span{ color:var(--status-positive-fg); font-weight:800; }
   .ql-more{ width:100%; text-align:center; background:none; border:none; color:var(--ink-soft); font-weight:700; font-size:12.5px; padding:12px; cursor:pointer; }
   .ql-choice-row{ display:flex; gap:10px; margin:6px 0 4px; }
   .ql-choice{
@@ -426,6 +428,12 @@
   .gallery-card .cap .s{ font-size:10px; color:var(--ink-soft); margin-top:2px; }
   .del-x{ position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.45); color:#fff; border:none; border-radius:50%; width:22px; height:22px; font-size:12px; cursor:pointer; line-height:22px; text-align:center; padding:0; }
   .insight-item{ padding:9px 0; border-bottom:1px dashed var(--line); font-size:12.5px; line-height:1.55; }
+  .wk-chart-block{ margin-bottom:18px; }
+  .wk-chart-block:last-child{ margin-bottom:2px; }
+  .wk-chart-label{ display:flex; align-items:center; justify-content:space-between; font-size:12.5px; font-weight:800; color:var(--ink); margin-bottom:2px; }
+  .wk-legend{ display:flex; align-items:center; font-size:10px; font-weight:600; color:var(--ink-soft); }
+  .wk-legend i{ width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:4px; margin-left:10px; }
+  .wk-legend i:first-child{ margin-left:0; }
   .insight-item:last-child{ border-bottom:none; }
   .report h3{ font-family:'Baloo 2',cursive; font-size:15px; margin:16px 0 6px; color:var(--lavender-deep); }
   .report h3:first-of-type{ margin-top:6px; }
@@ -566,7 +574,8 @@ function buildPayload(){
     nappies: state.nappies,
     prefs: state.prefs,
     temperatures: state.temperatures,
-    healthRecords: state.healthRecords
+    healthRecords: state.healthRecords,
+    activeSleep: state.activeSleep
   };
 }
 async function firestoreGet(){
@@ -600,6 +609,8 @@ function applyRemote(remote){
   state.prefs = remote.prefs || {};
   state.temperatures = remote.temperatures || [];
   state.healthRecords = remote.healthRecords || [];
+  state.activeSleep = remote.activeSleep || null;
+  if(state.activeSleep) startSleepTicker(); else stopSleepTicker();
 }
 function safeRerender(){
   if(!state.profile){ render(); return; }
@@ -613,6 +624,9 @@ function safeRerender(){
    land within moments, and unchanged state costs nothing. */
 let dataLoadError = null;
 let lastLoadDiagnostic = null;
+let weekMetric = 'sleep';
+let weekActiveIdx = null;
+let weekOffset = 0;
 function startRealtimeSync(){
   stopRealtimeSync();
   unsubscribeSnapshot = familyDocRef().onSnapshot(snap=>{
@@ -693,7 +707,8 @@ let state = {
   nappies: [],
   prefs: {},
   temperatures: [],
-  healthRecords: []
+  healthRecords: [],
+  activeSleep: null
 };
 let currentView = 'home';
 let currentGrowthTab = 'weight';
@@ -735,6 +750,59 @@ function fmtDuration(mins){
   mins = Math.round(mins||0);
   const h = Math.floor(mins/60), m = mins%60;
   return h>0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtTime(d){ return new Date(d).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:APP_TZ}); }
+function isoToLocalInput(iso){ const p=sydDateParts(iso); return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; }
+/* ---------------- Live sleep timer ---------------- */
+let sleepTickInterval = null;
+function startSleepTicker(){
+  stopSleepTicker();
+  sleepTickInterval = setInterval(()=>{
+    if(!state.activeSleep){ stopSleepTicker(); return; }
+    const mins = Math.floor((Date.now()-new Date(state.activeSleep.startAt).getTime())/60000);
+    document.querySelectorAll('.sleep-elapsed-live').forEach(el=>{ el.textContent = fmtDuration(mins); });
+  }, 20000);
+}
+function stopSleepTicker(){ if(sleepTickInterval){ clearInterval(sleepTickInterval); sleepTickInterval=null; } }
+/* Naps before 7am/after 7pm are classified as night sleep; the parent can always
+   correct this afterwards from Edit — it never affects the recorded duration. */
+function inferSleepType(startISO){
+  const h = parseInt(sydDateParts(startISO).hour, 10);
+  return (h>=19 || h<7) ? 'night' : 'nap';
+}
+async function wakeUpSleep(){
+  if(!state.activeSleep) return null;
+  const startISO = state.activeSleep.startAt;
+  const endISO = new Date().toISOString();
+  const mins = Math.max(1, Math.round((new Date(endISO)-new Date(startISO))/60000));
+  const rec = { id: state.activeSleep.id, date: startISO, endAt: endISO, mins, label: inferSleepType(startISO), note:'', source:'timer' };
+  state.sleeps.push(rec);
+  state.activeSleep = null;
+  stopSleepTicker();
+  await saveKey('sleep', state.sleeps);
+  return { rec, startISO };
+}
+async function handleWakeUp(fromSheet){
+  const result = await wakeUpSleep();
+  if(!result) return;
+  if(fromSheet) closeSheet();
+  renderMain();
+  showUndoToast(`✓ Sleep logged · ${fmtDuration(result.rec.mins)}`, async ()=>{
+    state.sleeps = state.sleeps.filter(x=>x.id!==result.rec.id);
+    state.activeSleep = { id: result.rec.id, startAt: result.startISO };
+    startSleepTicker();
+    await saveKey('sleep', state.sleeps);
+    renderMain();
+  });
+}
+function openEditSleepStart(){
+  cancelEditing();
+  sheetDraft = {};
+  editingActiveSleepStart = true;
+  sheetOpen = true;
+  sheetStep = 'sleep';
+  sheetShowTime=false; sheetShowDetails=false;
+  renderSheet();
 }
 function timeAgo(dateISO){
   const diffMs = Date.now() - new Date(dateISO).getTime();
@@ -1231,6 +1299,7 @@ let growthExplainOpen = false;
 let showWhoCurves = false;
 let sheetDraft = {};
 let editingKind = null, editingId = null, editingItem = null;
+let editingActiveSleepStart = false;
 let entryActionKind = null, entryActionId = null;
 const STEP_TO_KIND = { nappy:'nappy', feed:'feed', sleep:'sleep', temp:'temperature', weight:'measurement', moment:'milestone', healthnote:'healthRecord' };
 const KIND_TO_STEP = { nappy:'nappy', feed:'feed', sleep:'sleep', temperature:'temp', measurement:'weight', milestone:'moment', healthRecord:'healthnote' };
@@ -1343,6 +1412,7 @@ function openSheet(step){ cancelEditing(); sheetOpen=true; goToStep(step||'menu'
 function closeSheet(){
   sheetOpen=false;
   cancelEditing();
+  editingActiveSleepStart = false;
   const overlay=document.getElementById('sheetOverlay');
   if(overlay) overlay.classList.remove('open');
 }
@@ -1357,6 +1427,7 @@ function goToStep(key){
   cancelEditing();
   sheetDraft = {};
   outlierWarning = null;
+  editingActiveSleepStart = false;
   sheetShowTime=false; sheetShowDetails=false;
   if(key==='pump'){ sheetStep='feed'; sheetPumpForced=true; }
   else { sheetStep=key; sheetPumpForced=false; }
@@ -1422,7 +1493,7 @@ function renderDetailSheet(){
   let title='', lines=[];
   if(sheetDetailKind==='feed'){ const nf=normalizeFeed(item); title='Feed'; lines=[feedSummaryLine(item), fmtDateTime(nf.date), item.note]; }
   else if(sheetDetailKind==='nappy'){ title='Nappy'; lines=[item.type==='wet'?'Wet':item.type==='poo'?'Poo':'Wet + poo', fmtDateTime(item.date), item.note]; }
-  else if(sheetDetailKind==='sleep'){ title='Sleep'; lines=[`${item.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(item.mins)}`, fmtDateTime(item.date)]; }
+  else if(sheetDetailKind==='sleep'){ title='Sleep'; lines=[`${item.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(item.mins)}`, `${fmtTime(item.date)}${item.endAt?' – '+fmtTime(item.endAt):''} · ${fmtDate(item.date)}`, item.note]; }
   else if(sheetDetailKind==='measurement'){ title=labelType(item.type); lines=[`${item.value}${unitFor(item.type)}`, fmtDateTime(item.date), item.note]; }
   else if(sheetDetailKind==='vaccine'){ title=item.name; lines=[item.dose, item.givenDate?`Given ${fmtDate(item.givenDate)}`:'Not yet given', item.provider?('Provider: '+item.provider):null]; }
   else if(sheetDetailKind==='appointment'){ title=item.title; lines=[fmtDateFull(item.date), item.note]; }
@@ -1467,10 +1538,11 @@ function renderRestoreConfirmSheet(){
   `;
 }
 function renderQuickLogMenu(){
+  const sleepActive = !!state.activeSleep;
   const items = [
     {key:'feed', label:'Feed', ic:'feed'},
     {key:'nappy', label:'Nappy', ic:'nappy'},
-    {key:'sleep', label:'Sleep', ic:'sleep'},
+    {key:'sleep', label: sleepActive?'Wake up':'Sleep', ic:'sleep', active:sleepActive},
     {key:'pump', label:'Pump', ic:'pump'},
     {key:'weight', label:'Measurement', ic:'ruler'},
     {key:'temp', label:'Temperature', ic:'temp'},
@@ -1479,7 +1551,7 @@ function renderQuickLogMenu(){
   return `
     <div class="sheet-title">Quick log</div>
     <div class="ql-grid">
-      ${items.map(i=>`<button class="ql-item" data-qlopen="${i.key}">${icon(i.ic,22)}<span>${i.label}</span></button>`).join('')}
+      ${items.map(i=>`<button class="ql-item${i.active?' ql-item-active':''}" data-qlopen="${i.key}">${icon(i.ic,22)}<span>${i.label}</span></button>`).join('')}
     </div>
     <button class="ql-more" id="qlMore">More options</button>
   `;
@@ -1563,17 +1635,56 @@ function renderQuickLogFeed(forcePump){
     ${isEdit ? `<button class="ql-link" id="deleteFeedBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
-function renderQuickLogSleep(){
-  const isEdit = editingKind==='sleep';
+function renderActiveSleepSheet(){
+  const startISO = state.activeSleep.startAt;
+  if(editingActiveSleepStart){
+    return `
+      <div class="sheet-title">Edit start time</div>
+      <label>Sleep actually started</label>
+      <input type="datetime-local" id="editStartInput" value="${fVal('editStartInput', isoToLocalInput(startISO))}" max="${todayInput()}">
+      <button class="btn" id="saveSleepStartBtn">Save</button>
+      <button class="ql-link" id="cancelEditSleepStartBtn">Cancel</button>
+    `;
+  }
+  const mins = Math.max(0, Math.floor((Date.now()-new Date(startISO).getTime())/60000));
+  const longRunning = mins >= 480;
   return `
-    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit sleep':'Sleep'}</div>
+    <div class="sheet-title">Sleeping now</div>
+    <div class="hero-metric sleep-elapsed-live" aria-live="off" style="font-size:32px;">${fmtDuration(mins)}</div>
+    <div class="meta-text" style="margin-top:4px;">Started ${fmtTime(startISO)}</div>
+    ${longRunning ? `<div class="note" style="background:var(--status-attention-bg);color:var(--status-attention-fg);border-radius:var(--radius-control);padding:10px 12px;margin-top:12px;">Sleep timer has been running for ${fmtDuration(mins)}. Still sleeping, or would you like to set a wake time?</div>` : ''}
+    <button class="btn" id="wakeUpBtn" aria-label="Wake up, end sleep timer">Wake up</button>
+    <button class="ql-link" id="editSleepStartBtn">Edit start time</button>
+  `;
+}
+function renderSleepChoice(){
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Sleep</div>
+    <button class="btn" id="startSleepBtn" aria-label="Start sleep timer now">Start sleep now</button>
+    <button class="ql-link" id="qlSleepManual">Log manually</button>
+  `;
+}
+function renderQuickLogSleep(){
+  if(state.activeSleep && editingKind!=='sleep'){
+    return renderActiveSleepSheet();
+  }
+  if(!sheetShowDetails && editingKind!=='sleep'){
+    return renderSleepChoice();
+  }
+  const isEdit = editingKind==='sleep';
+  const defaultEndISO = isEdit ? (editingItem.endAt || new Date(new Date(editingItem.date).getTime()+(editingItem.mins||0)*60000).toISOString()) : null;
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit sleep':'Log sleep'}</div>
     <div class="seg" id="qlSleepTypeSeg">
       <button data-s="nap" class="${currentSleepType==='nap'?'active':''}">Nap</button>
       <button data-s="night" class="${currentSleepType==='night'?'active':''}">Night</button>
     </div>
-    <label>Duration (minutes)</label>
-    <input type="number" inputmode="numeric" id="qlSleepMins" placeholder="90" value="${fVal('qlSleepMins', isEdit?editingItem.mins:'')}" autofocus>
-    ${nowTimeRow('qlSleepDate', false, isEdit?editingItem.date:null)}
+    <label>Start</label>
+    <input type="datetime-local" id="qlSleepStart" value="${fVal('qlSleepStart', isEdit?isoToLocalInput(editingItem.date):todayInput())}">
+    <label>End</label>
+    <input type="datetime-local" id="qlSleepEnd" value="${fVal('qlSleepEnd', isEdit?isoToLocalInput(defaultEndISO):todayInput())}">
+    <label>Note (optional)</label>
+    <input type="text" id="qlSleepNote" placeholder="optional" value="${escapeHtml(fVal('qlSleepNote', isEdit?(editingItem.note||''):''))}">
     <button class="btn" id="qlSaveSleep">${isEdit?'Save changes':'Save sleep'}</button>
     ${isEdit ? `<button class="ql-link" id="deleteSleepBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
@@ -1741,19 +1852,58 @@ function bindSheet(){
   const delFeed = document.getElementById('deleteFeedBtn');
   if(delFeed) delFeed.addEventListener('click', ()=> deleteEntryWithUndo('feed', editingId));
 
+  const startSleepBtn = document.getElementById('startSleepBtn');
+  if(startSleepBtn) startSleepBtn.addEventListener('click', async ()=>{
+    if(state.activeSleep){ renderSheet(); return; } // race guard: another device already started one
+    startSleepBtn.disabled = true;
+    state.activeSleep = { id: uid(), startAt: new Date().toISOString() };
+    startSleepTicker();
+    await saveKey('activeSleep', state.activeSleep);
+    closeSheet(); renderMain();
+    toast('😴 Sleep started');
+  });
+  const qlSleepManual = document.getElementById('qlSleepManual');
+  if(qlSleepManual) qlSleepManual.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowDetails=true; renderSheet(); });
+  const wakeUpBtn = document.getElementById('wakeUpBtn');
+  if(wakeUpBtn) wakeUpBtn.addEventListener('click', async ()=>{
+    wakeUpBtn.disabled = true;
+    await handleWakeUp(true);
+  });
+  const editSleepStartBtn = document.getElementById('editSleepStartBtn');
+  if(editSleepStartBtn) editSleepStartBtn.addEventListener('click', ()=>{ editingActiveSleepStart=true; sheetDraft={}; renderSheet(); });
+  const cancelEditSleepStartBtn = document.getElementById('cancelEditSleepStartBtn');
+  if(cancelEditSleepStartBtn) cancelEditSleepStartBtn.addEventListener('click', ()=>{ editingActiveSleepStart=false; renderSheet(); });
+  const saveSleepStartBtn = document.getElementById('saveSleepStartBtn');
+  if(saveSleepStartBtn) saveSleepStartBtn.addEventListener('click', async ()=>{
+    const val = document.getElementById('editStartInput').value;
+    if(!val){ toast('Pick a time'); return; }
+    const newStart = new Date(val).toISOString();
+    if(new Date(newStart) > new Date()){ toast('Start time can\'t be in the future'); return; }
+    state.activeSleep.startAt = newStart;
+    await saveKey('activeSleep', state.activeSleep);
+    editingActiveSleepStart = false;
+    toast('Start time updated');
+    renderMain();
+  });
+
   document.querySelectorAll('#qlSleepTypeSeg [data-s]').forEach(b=>{
     b.addEventListener('click', ()=>{ captureSheetDraft(); currentSleepType=b.dataset.s; renderSheet(); });
   });
   const saveSleepBtn = document.getElementById('qlSaveSleep');
   if(saveSleepBtn) saveSleepBtn.addEventListener('click', async ()=>{
-    const mins = parseInt(document.getElementById('qlSleepMins').value);
-    const date = document.getElementById('qlSleepDate').value;
-    if(!mins){ toast('Enter a duration'); return; }
+    const startVal = document.getElementById('qlSleepStart').value;
+    const endVal = document.getElementById('qlSleepEnd').value;
+    const note = document.getElementById('qlSleepNote') ? document.getElementById('qlSleepNote').value.trim() : '';
+    if(!startVal || !endVal){ toast('Pick a start and end time'); return; }
+    const startISO = new Date(startVal).toISOString();
+    const endISO = new Date(endVal).toISOString();
+    if(new Date(endISO) <= new Date(startISO)){ toast('End time must be after start time'); return; }
+    const mins = Math.round((new Date(endISO)-new Date(startISO))/60000);
     const err = checkBounds(mins, 'sleepMins'); if(err){ toast(err); return; }
     if(editingKind==='sleep' && editingId){
-      updateEntry('sleep', editingId, {date:new Date(date).toISOString(), label:currentSleepType, mins});
+      updateEntry('sleep', editingId, {date:startISO, endAt:endISO, label:currentSleepType, mins, note});
     } else {
-      state.sleeps.push({id:uid(), date:new Date(date).toISOString(), label:currentSleepType, mins});
+      state.sleeps.push({id:uid(), date:startISO, endAt:endISO, label:currentSleepType, mins, note, source:'manual'});
     }
     await saveKey('sleep', state.sleeps);
     await flashButtonSuccess('qlSaveSleep', '✓ Logged'); closeSheet(); renderMain();
@@ -1955,7 +2105,7 @@ function buildTimelineEvents(){
   const events = [];
   state.feeds.forEach(f=>{ const nf=normalizeFeed(f); events.push({id:f.id, kind:'feed', date:nf.date, cat:'feeding', line: feedSummaryLine(f)}); });
   state.nappies.forEach(n=>{ events.push({id:n.id, kind:'nappy', date:n.date, cat:'nappies', line: `${n.type==='wet'?'💧 Wet':n.type==='poo'?'💩 Poo':'💧💩 Wet + poo'} nappy${n.note?' · '+n.note:''}`}); });
-  state.sleeps.forEach(s=>{ events.push({id:s.id, kind:'sleep', date:s.date, cat:'sleep', line: `😴 ${s.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(s.mins)}`}); });
+  state.sleeps.forEach(s=>{ events.push({id:s.id, kind:'sleep', date:s.date, cat:'sleep', line: `😴 ${s.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(s.mins)}${s.endAt?' · ends '+fmtTime(s.endAt):''}`}); });
   state.measurements.forEach(m=>{ events.push({id:m.id, kind:'measurement', date:m.date, cat:'growth', line: `${m.type==='weight'?'⚖️':m.type==='length'?'📏':'🧠'} ${labelType(m.type)} · ${m.value}${unitFor(m.type)}`}); });
   state.vaccines.filter(v=>v.givenDate).forEach(v=>{ events.push({id:v.id, kind:'vaccine', date:v.givenDate, cat:'health', line: `💉 ${v.name} given`}); });
   state.appointments.forEach(a=>{ events.push({id:a.id, kind:'appointment', date:a.date, cat:'health', line: `🩺 ${a.title}${a.status==='completed'?' (completed)':a.status==='cancelled'?' (cancelled)':''}`}); });
@@ -1983,9 +2133,23 @@ function renderHome(){
   const dueVaccines = state.vaccines.filter(v=>!v.givenDate && !v.notApplicable && !v.hidden).sort((a,b)=>a.dueMonths-b.dueMonths).slice(0,1);
   const recentEvents = buildTimelineEvents().slice(0,4);
   const tempBanner = urgentTempBanner();
+  const activeSleepMins = state.activeSleep ? Math.max(0, Math.floor((Date.now()-new Date(state.activeSleep.startAt).getTime())/60000)) : 0;
+  const activeSleepLong = activeSleepMins >= 480;
 
   return `
     ${tempBanner}
+    ${state.activeSleep ? `
+    <div class="section-header">Sleep</div>
+    <div class="card">
+      <div class="secondary-metric" style="color:var(--lavender-deep);">Sleeping now</div>
+      <div class="hero-metric sleep-elapsed-live" aria-live="off" style="font-size:30px;margin-top:2px;">${fmtDuration(activeSleepMins)}</div>
+      <div class="meta-text" style="margin-top:2px;">Started ${fmtTime(state.activeSleep.startAt)}</div>
+      ${activeSleepLong ? `<div class="note" style="background:var(--status-attention-bg);color:var(--status-attention-fg);border-radius:var(--radius-control);padding:10px 12px;margin-top:10px;">Running for ${fmtDuration(activeSleepMins)} — still sleeping, or set a wake time?</div>` : ''}
+      <button class="btn" id="homeWakeUpBtn" aria-label="Wake up, end sleep timer" style="margin-top:14px;">Wake up</button>
+      <button class="ql-link" id="homeEditSleepStartBtn">Edit start time</button>
+    </div>
+    ` : ''}
+
     <div class="section-header">Last feed</div>
     <div class="card">
       ${lastFeed ? `
@@ -2036,6 +2200,10 @@ function bindHome(){
   if(ggl) ggl.addEventListener('click', ()=>{ currentView='growth'; render(); });
   const gcl = document.getElementById('careRowLink');
   if(gcl) gcl.addEventListener('click', ()=>{ currentView='care'; render(); });
+  const hwb = document.getElementById('homeWakeUpBtn');
+  if(hwb) hwb.addEventListener('click', async ()=>{ hwb.disabled = true; await handleWakeUp(false); });
+  const hesb = document.getElementById('homeEditSleepStartBtn');
+  if(hesb) hesb.addEventListener('click', ()=> openEditSleepStart());
 }
 
 /* ---------------- Add (unified quick-log hub) ---------------- */
@@ -2727,6 +2895,364 @@ function renderBaselineCard(){
     </div>
   `;
 }
+/* ---------------- 7-day breakdown chart (sleep / nappies / feeds) ---------------- */
+/* ---------------- 7-Day Summary (centralized weekly aggregation) ---------------- */
+/* Finds the UTC instant for Sydney midnight on a given day-key, via fixed-point
+   correction against the Intl-derived Sydney calendar (handles DST correctly
+   without needing a timezone database of our own). */
+function sydMidnightUTC(dayKey){
+  let guess = new Date(dayKey+'T00:00:00Z').getTime();
+  for(let i=0;i<3;i++){
+    const p = sydDateParts(guess);
+    const guessedKey = `${p.year}-${p.month}-${p.day}`;
+    const dayDiff = Math.round((new Date(guessedKey+'T00:00:00Z').getTime() - new Date(dayKey+'T00:00:00Z').getTime())/86400000);
+    const minuteOfDay = parseInt(p.hour,10)*60 + parseInt(p.minute,10);
+    guess -= dayDiff*86400000 + minuteOfDay*60000;
+  }
+  return guess;
+}
+function sleepBounds(s){
+  const start = new Date(s.date);
+  const end = s.endAt ? new Date(s.endAt) : new Date(start.getTime() + (s.mins||0)*60000);
+  return {start, end};
+}
+/* Minutes of a sleep record that actually fall within a given Sydney calendar day —
+   the core piece that lets a sleep crossing midnight be split correctly across
+   both days for daily totals, while the underlying record stays intact. */
+function sleepMinutesOnDay(s, dayKey){
+  const {start, end} = sleepBounds(s);
+  const dayStart = sydMidnightUTC(dayKey), dayEnd = dayStart+86400000;
+  const overlapStart = Math.max(start.getTime(), dayStart);
+  const overlapEnd = Math.min(end.getTime(), dayEnd);
+  return Math.max(0, (overlapEnd-overlapStart)/60000);
+}
+function get7DayKeys(offsetWeeks){
+  offsetWeeks = offsetWeeks || 0;
+  const base = new Date(); base.setDate(base.getDate() - offsetWeeks*7);
+  const keys = [];
+  for(let i=6;i>=0;i--){ const d = new Date(base); d.setDate(d.getDate()-i); keys.push(sydDateKey(d)); }
+  return keys;
+}
+function weekRangeLabel(dayKeys){
+  const first = new Date(dayKeys[0]+'T12:00:00'), last = new Date(dayKeys[dayKeys.length-1]+'T12:00:00');
+  const sameMonth = first.getMonth()===last.getMonth();
+  const f1 = first.toLocaleDateString(undefined,{day:'numeric', month: sameMonth?undefined:'short', timeZone:APP_TZ});
+  const f2 = last.toLocaleDateString(undefined,{day:'numeric', month:'short', timeZone:APP_TZ});
+  return `${f1} – ${f2}`;
+}
+function weekDayLabels(dayKeys, todayKey){
+  return dayKeys.map(k=> k===todayKey ? 'Today' : new Date(k+'T12:00:00').toLocaleDateString(undefined,{weekday:'short', timeZone:APP_TZ}).slice(0,3));
+}
+/* --- Centralized per-metric daily aggregation. Reused by the 7-Day view, and
+   safe to reuse anywhere else that needs a day-by-day breakdown. --- */
+function buildSleepWeek(dayKeys){
+  return dayKeys.map(dayKey=>{
+    const overlapping = state.sleeps.filter(s=> sleepMinutesOnDay(s, dayKey) > 0.5);
+    const totalMin = overlapping.reduce((sum,s)=> sum+sleepMinutesOnDay(s,dayKey), 0);
+    const napMin = overlapping.filter(s=>s.label==='nap').reduce((sum,s)=>sum+sleepMinutesOnDay(s,dayKey),0);
+    const nightMin = overlapping.filter(s=>s.label==='night').reduce((sum,s)=>sum+sleepMinutesOnDay(s,dayKey),0);
+    const longest = overlapping.reduce((mx,s)=>Math.max(mx, s.mins||0), 0);
+    return { dayKey, totalMin, periods:overlapping.length, longest, napMin, nightMin, hasData: overlapping.length>0 };
+  });
+}
+function buildFeedWeek(dayKeys){
+  return dayKeys.map(dayKey=>{
+    const feeds = state.feeds.map(normalizeFeed).filter(f=> sydDateKey(f.date)===dayKey);
+    const breastfeeds = feeds.filter(f=>f.type==='breastfeeding');
+    const expressed = feeds.filter(f=>f.type==='expressed');
+    const formula = feeds.filter(f=>f.type==='formula');
+    const pumping = feeds.filter(f=>f.type==='pumping');
+    const nursingMin = breastfeeds.reduce((s,f)=>s+(f.totalMins||0),0);
+    const leftMin = breastfeeds.reduce((s,f)=>s+(f.leftMins||0),0);
+    const rightMin = breastfeeds.reduce((s,f)=>s+(f.rightMins||0),0);
+    const times = feeds.filter(f=>f.type!=='pumping').map(f=>new Date(f.date).getTime()).sort((a,b)=>a-b);
+    let avgInterval=null, longestInterval=null;
+    if(times.length>=2){
+      const gaps=[]; for(let i=1;i<times.length;i++) gaps.push(times[i]-times[i-1]);
+      avgInterval = gaps.reduce((a,b)=>a+b,0)/gaps.length/60000;
+      longestInterval = Math.max(...gaps)/60000;
+    }
+    return {
+      dayKey, babyFeedCount: breastfeeds.length+expressed.length+formula.length,
+      nursingMin, breastfeedCount:breastfeeds.length, leftMin, rightMin,
+      expressedCount:expressed.length, expressedMl: expressed.reduce((s,f)=>s+(f.consumedMl||0),0),
+      formulaCount:formula.length, formulaMl: formula.reduce((s,f)=>s+(f.consumedMl||0),0),
+      pumpingCount:pumping.length, pumpMl: pumping.reduce((s,f)=>s+(f.pumpTotalMl||0),0),
+      avgInterval, longestInterval, hasData: feeds.length>0
+    };
+  });
+}
+function buildNappyWeek(dayKeys){
+  return dayKeys.map(dayKey=>{
+    const nappies = state.nappies.filter(n=> sydDateKey(n.date)===dayKey);
+    let wetOnly=0, dirtyOnly=0, both=0;
+    nappies.forEach(n=>{ if(n.type==='wet') wetOnly++; else if(n.type==='poo') dirtyOnly++; else if(n.type==='both') both++; });
+    return { dayKey, changeCount: nappies.length, wetOut: wetOnly+both, dirtyOut: dirtyOnly+both, wetOnly, dirtyOnly, both, hasData: nappies.length>0 };
+  });
+}
+function weekAverageExcludingToday(buckets, key, todayKey){
+  const completed = buckets.filter(b=> b.dayKey!==todayKey && b.hasData);
+  return completed.length ? completed.reduce((s,b)=>s+b[key],0)/completed.length : null;
+}
+/* Compares this window's completed-day average against the previous 7-day window.
+   Requires reasonable coverage in both windows and a meaningful (non-noise) gap. */
+function compareToPreviousWeek(metric){
+  const todayKey = sydDateKey();
+  const curKeys = get7DayKeys(weekOffset), prevKeys = get7DayKeys(weekOffset+1);
+  let curBuckets, prevBuckets, key, fmt;
+  if(metric==='sleep'){ curBuckets=buildSleepWeek(curKeys); prevBuckets=buildSleepWeek(prevKeys); key='totalMin'; }
+  else if(metric==='feed'){ curBuckets=buildFeedWeek(curKeys); prevBuckets=buildFeedWeek(prevKeys); key='babyFeedCount'; }
+  else { curBuckets=buildNappyWeek(curKeys); prevBuckets=buildNappyWeek(prevKeys); key='wetOut'; }
+  const curCompleted = curBuckets.filter(b=>b.dayKey!==todayKey && b.hasData);
+  const prevCompleted = prevBuckets.filter(b=>b.hasData);
+  if(curCompleted.length<3 || prevCompleted.length<3) return null;
+  const curAvg = curCompleted.reduce((s,b)=>s+b[key],0)/curCompleted.length;
+  const prevAvg = prevCompleted.reduce((s,b)=>s+b[key],0)/prevCompleted.length;
+  const diff = curAvg-prevAvg;
+  if(metric==='sleep'){
+    if(Math.abs(diff)<20) return null;
+    return `Sleep has been ${diff>0?'a little longer':'a little shorter'} this week — ${fmtDuration(curAvg)}/day vs ${fmtDuration(prevAvg)}/day the week before.`;
+  }
+  if(metric==='feed'){
+    if(Math.abs(diff)<1.0) return null;
+    return `Feeding ${diff>0?'increased':'decreased'} from ${prevAvg.toFixed(1)}/day to ${curAvg.toFixed(1)}/day vs the previous week.`;
+  }
+  if(Math.abs(diff)<1.0) return null;
+  return `Wet nappies ${diff>0?'up':'down'} from ${prevAvg.toFixed(1)}/day to ${curAvg.toFixed(1)}/day vs the previous week.`;
+}
+function sleepBaselineNote(avgMin){
+  if(avgMin==null || weekOffset!==0) return null;
+  const b = baselineStats(7);
+  if(!b || !b.sleepMin) return null;
+  const lo=Math.round(b.sleepMin.p25), hi=Math.round(b.sleepMin.p75);
+  if(avgMin < lo-15) return `A little less than her recent typical range (${fmtDuration(lo)}–${fmtDuration(hi)}/day).`;
+  if(avgMin > hi+15) return `A little more than her recent typical range (${fmtDuration(lo)}–${fmtDuration(hi)}/day).`;
+  return `Consistent with her recent pattern (typically ${fmtDuration(lo)}–${fmtDuration(hi)}/day).`;
+}
+function feedBaselineNote(avgFeeds){
+  if(avgFeeds==null || weekOffset!==0) return null;
+  const b = baselineStats(7);
+  if(!b || !b.feeds) return null;
+  const lo=Math.round(b.feeds.p25), hi=Math.round(b.feeds.p75);
+  if(avgFeeds < lo-1) return `Fewer feeds than her recent typical range (${lo}–${hi}/day).`;
+  if(avgFeeds > hi+1) return `More frequent than her recent typical range (${lo}–${hi}/day).`;
+  return `Consistent with her recent pattern (typically ${lo}–${hi} feeds/day).`;
+}
+function nappyBaselineNote(avgWet){
+  if(avgWet==null || weekOffset!==0) return null;
+  const b = baselineStats(7);
+  if(!b || !b.wet) return null;
+  const lo=Math.round(b.wet.p25), hi=Math.round(b.wet.p75);
+  if(avgWet < lo-1) return `Fewer wet nappies than her recent typical range (${lo}–${hi}/day).`;
+  if(avgWet > hi+1) return `More wet nappies than her recent typical range (${lo}–${hi}/day).`;
+  return `Consistent with her recent pattern (typically ${lo}–${hi} wet nappies/day).`;
+}
+/* Interactive 7-bar chart. Pass segmentsFn for a stacked bar (nappies); omit it
+   for a simple single-value bar (sleep/feeding). Every column — even empty
+   ones — gets a full-height transparent tap target so short bars stay tappable. */
+function buildBarChartSVG(buckets, dayKeys, todayKey, valueFn, opts){
+  opts = opts || {};
+  const W=340,H=140,padL=6,padR=6,padT=10,padB=22,barGap=6;
+  const barW = (W-padL-padR-barGap*6)/7;
+  const dark = isDarkMode();
+  const values = buckets.map(b=> b.hasData ? valueFn(b) : 0);
+  const maxV = Math.max(1, ...values);
+  const labels = weekDayLabels(dayKeys, todayKey);
+  const barColor = opts.barColor || (dark?'#F2A796':'#EC9384');
+  const noDataColor = dark ? '#3D3544' : '#EDE3F2';
+  const labelColor = dark ? '#EDE8F0' : '#332C3A';
+  const textColor = dark ? '#83788F' : '#AFA8B7';
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible" font-family="Nunito, sans-serif" role="img" aria-label="7 day chart, tap a bar for details">`;
+  buckets.forEach((b,i)=>{
+    const x = padL + i*(barW+barGap);
+    const isToday = b.dayKey===todayKey;
+    const isActive = opts.activeIdx===i;
+    if(!b.hasData){
+      svg += `<rect x="${x.toFixed(1)}" y="${(H-padB-3).toFixed(1)}" width="${barW.toFixed(1)}" height="3" rx="1.5" fill="${noDataColor}"/>`;
+    } else {
+      const v = values[i];
+      const hgt = Math.max(3, (v/maxV)*(H-padT-padB));
+      const y = H-padB-hgt;
+      const segs = opts.segmentsFn ? opts.segmentsFn(b) : null;
+      if(segs){
+        let cursor = H-padB;
+        segs.forEach(seg=>{
+          const segH = maxV>0 ? (seg.value/maxV)*(H-padT-padB) : 0;
+          if(segH>0.3){ cursor -= segH; svg += `<rect x="${x.toFixed(1)}" y="${cursor.toFixed(1)}" width="${barW.toFixed(1)}" height="${segH.toFixed(1)}" rx="3" fill="${seg.color}" opacity="${isActive||isToday?1:0.75}"/>`; }
+        });
+      } else {
+        svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${hgt.toFixed(1)}" rx="4" fill="${barColor}" opacity="${isActive?1:(isToday?0.9:0.6)}"/>`;
+      }
+      if(isActive) svg += `<rect x="${(x-1.5).toFixed(1)}" y="${(y-1.5).toFixed(1)}" width="${(barW+3).toFixed(1)}" height="${(H-padB-y+1.5).toFixed(1)}" rx="5" fill="none" stroke="${barColor}" stroke-width="1.5" opacity="0.6"/>`;
+    }
+    svg += `<rect data-idx="${i}" class="week-bar-tap" x="${x.toFixed(1)}" y="0" width="${barW.toFixed(1)}" height="${H-padB}" fill="transparent" style="cursor:pointer;"/>`;
+    svg += `<text x="${(x+barW/2).toFixed(1)}" y="${H-6}" font-size="9" fill="${isToday?labelColor:textColor}" text-anchor="middle" font-weight="${isToday?800:600}">${labels[i]}</text>`;
+  });
+  svg += `</svg>`;
+  return svg;
+}
+function renderSleepDayDetail(b){
+  const label = new Date(b.dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'short', timeZone:APP_TZ});
+  const isToday = b.dayKey===sydDateKey();
+  if(!b.hasData) return `<div class="empty" style="margin-top:8px;">No sleep logged ${isToday?'yet today':'that day'}.</div>`;
+  const showNapNight = b.napMin>0 && b.nightMin>0;
+  return `
+    <div class="surface-group" style="margin-top:8px;padding:12px 14px;">
+      <div style="font-weight:800;font-size:13px;">${label}${isToday?' · so far':''}</div>
+      <div class="rline">${fmtDuration(b.totalMin)} total${isToday?' so far':''} · ${b.periods} period${b.periods===1?'':'s'}</div>
+      <div class="rline">Longest: ${fmtDuration(b.longest)}</div>
+      ${showNapNight ? `<div class="rline">Naps: ${fmtDuration(b.napMin)} · Night: ${fmtDuration(b.nightMin)}</div>` : ''}
+    </div>`;
+}
+function renderSleepWeekView(buckets, dayKeys, todayKey){
+  const avgMin = weekAverageExcludingToday(buckets, 'totalMin', todayKey);
+  const completed = buckets.filter(b=>b.dayKey!==todayKey && b.hasData);
+  const longestDayTotal = completed.length ? Math.max(...completed.map(b=>b.totalMin)) : null;
+  const longestStretch = buckets.reduce((mx,b)=>Math.max(mx,b.longest||0),0);
+  const chart = buildBarChartSVG(buckets, dayKeys, todayKey, b=>b.totalMin, {barColor: isDarkMode()?'#C3AADD':'#8E6FB0', activeIdx: weekActiveIdx});
+  const active = weekActiveIdx!=null ? buckets[weekActiveIdx] : null;
+  const cmp = weekOffset===0 ? compareToPreviousWeek('sleep') : null;
+  const baselineNote = sleepBaselineNote(avgMin);
+  return `
+    <div class="legend" style="margin-top:14px;"><span>Total sleep / day</span></div>
+    <div id="weekChartWrap">${chart}</div>
+    ${active ? renderSleepDayDetail(active) : `<div class="meta-text" style="margin-top:8px;">Tap a day for details.</div>`}
+    <div class="note" style="margin-top:10px;">${avgMin!=null?`Average ${fmtDuration(avgMin)}/day`:'Not enough logged days yet'}${longestDayTotal!=null?` · Longest day ${fmtDuration(longestDayTotal)}`:''}${longestStretch?` · Longest stretch ${fmtDuration(longestStretch)}`:''}</div>
+    ${cmp ? `<div class="insight-item">${cmp}</div>` : ''}
+    ${baselineNote ? `<div class="insight-item">${baselineNote}</div>` : ''}
+  `;
+}
+function renderFeedDayDetail(b){
+  const label = new Date(b.dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'short', timeZone:APP_TZ});
+  const isToday = b.dayKey===sydDateKey();
+  if(!b.hasData) return `<div class="empty" style="margin-top:8px;">No feeds logged ${isToday?'yet today':'that day'}.</div>`;
+  return `
+    <div class="surface-group" style="margin-top:8px;padding:12px 14px;">
+      <div style="font-weight:800;font-size:13px;">${label}${isToday?' · so far':''}</div>
+      <div class="rline">${b.babyFeedCount} feed${b.babyFeedCount===1?'':'s'} logged</div>
+      ${b.breastfeedCount ? `<div class="rline">Breastfeeding: ${b.breastfeedCount} · ${fmtDuration(b.nursingMin)}</div>` : ''}
+      ${b.expressedCount ? `<div class="rline">Expressed milk: ${b.expressedCount} · ${b.expressedMl} mL</div>` : ''}
+      ${b.formulaCount ? `<div class="rline">Formula: ${b.formulaCount} · ${b.formulaMl} mL</div>` : ''}
+      ${b.pumpingCount ? `<div class="rline">Pumping: ${b.pumpingCount} · ${b.pumpMl} mL produced</div>` : ''}
+      ${b.avgInterval!=null ? `<div class="rline">Average interval: ${fmtDuration(b.avgInterval)}${b.longestInterval!=null?` · Longest ${fmtDuration(b.longestInterval)}`:''}</div>` : `<div class="rline">Not enough feeds logged that day for an interval.</div>`}
+    </div>`;
+}
+function renderFeedWeekView(buckets, dayKeys, todayKey){
+  const avgFeeds = weekAverageExcludingToday(buckets, 'babyFeedCount', todayKey);
+  const completed = buckets.filter(b=>b.dayKey!==todayKey && b.hasData);
+  const avgNursing = completed.length ? completed.reduce((s,b)=>s+b.nursingMin,0)/completed.length : null;
+  const formulaDays = completed.filter(b=>b.formulaMl>0);
+  const avgFormula = formulaDays.length ? formulaDays.reduce((s,b)=>s+b.formulaMl,0)/formulaDays.length : null;
+  const totalLeft = completed.reduce((s,b)=>s+b.leftMin,0), totalRight = completed.reduce((s,b)=>s+b.rightMin,0);
+  const totalLR = totalLeft+totalRight;
+  const chart = buildBarChartSVG(buckets, dayKeys, todayKey, b=>b.nursingMin, {barColor: isDarkMode()?'#F2A796':'#EC9384', activeIdx: weekActiveIdx});
+  const active = weekActiveIdx!=null ? buckets[weekActiveIdx] : null;
+  const cmp = weekOffset===0 ? compareToPreviousWeek('feed') : null;
+  const baselineNote = feedBaselineNote(avgFeeds);
+  return `
+    <div class="legend" style="margin-top:14px;"><span>Nursing minutes / day</span></div>
+    <div id="weekChartWrap">${chart}</div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-top:2px;">
+      ${buckets.map(b=>`<div style="text-align:center;font-size:9.5px;color:var(--ink-tertiary);">${b.hasData?b.babyFeedCount+'×':'–'}</div>`).join('')}
+    </div>
+    ${active ? renderFeedDayDetail(active) : `<div class="meta-text" style="margin-top:6px;">Tap a day for details.</div>`}
+    <div class="note" style="margin-top:10px;">${avgFeeds!=null?`${avgFeeds.toFixed(1)} feeds/day average`:'Not enough logged days yet'}${avgNursing?` · ${Math.round(avgNursing)} min/day nursing`:''}${avgFormula?` · ${Math.round(avgFormula)} mL/day formula`:''}</div>
+    ${totalLR>0 ? `<div class="meta-text">Left/Right: ${Math.round(totalLeft/totalLR*100)}% / ${Math.round(totalRight/totalLR*100)}%</div>` : ''}
+    ${cmp ? `<div class="insight-item">${cmp}</div>` : ''}
+    ${baselineNote ? `<div class="insight-item">${baselineNote}</div>` : ''}
+  `;
+}
+function renderNappyDayDetail(b){
+  const label = new Date(b.dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'short', timeZone:APP_TZ});
+  const isToday = b.dayKey===sydDateKey();
+  if(!b.hasData) return `<div class="empty" style="margin-top:8px;">No nappies logged ${isToday?'yet today':'that day'}.</div>`;
+  return `
+    <div class="surface-group" style="margin-top:8px;padding:12px 14px;">
+      <div style="font-weight:800;font-size:13px;">${label}${isToday?' · so far':''}</div>
+      <div class="rline">${b.changeCount} nappy change${b.changeCount===1?'':'s'}</div>
+      <div class="rline">Contained urine: ${b.wetOut} · Contained stool: ${b.dirtyOut}</div>
+      ${b.both ? `<div class="meta-text">${b.both} of these contained both.</div>` : ''}
+    </div>`;
+}
+function renderNappyWeekView(buckets, dayKeys, todayKey){
+  const avgWet = weekAverageExcludingToday(buckets, 'wetOut', todayKey);
+  const avgDirty = weekAverageExcludingToday(buckets, 'dirtyOut', todayKey);
+  const avgChanges = weekAverageExcludingToday(buckets, 'changeCount', todayKey);
+  const dark = isDarkMode();
+  const wetColor = dark?'#7FC4E0':'#5FA8D3', dirtyColor = dark?'#D9A15C':'#B8823A', bothColor = dark?'#C3AADD':'#9B82B8';
+  const chart = buildBarChartSVG(buckets, dayKeys, todayKey, b=>b.changeCount, {
+    activeIdx: weekActiveIdx,
+    segmentsFn: b=> [ {value:b.wetOnly, color:wetColor}, {value:b.both, color:bothColor}, {value:b.dirtyOnly, color:dirtyColor} ]
+  });
+  const active = weekActiveIdx!=null ? buckets[weekActiveIdx] : null;
+  const cmp = weekOffset===0 ? compareToPreviousWeek('nappy') : null;
+  const baselineNote = nappyBaselineNote(avgWet);
+  return `
+    <div class="legend" style="margin-top:14px;">
+      <span><i style="background:${wetColor}"></i>Wet</span>
+      <span><i style="background:${bothColor}"></i>Both</span>
+      <span><i style="background:${dirtyColor}"></i>Dirty</span>
+    </div>
+    <div id="weekChartWrap">${chart}</div>
+    ${active ? renderNappyDayDetail(active) : `<div class="meta-text" style="margin-top:8px;">Tap a day for details.</div>`}
+    <div class="note" style="margin-top:10px;">${avgWet!=null?`${avgWet.toFixed(1)} wet / ${avgDirty.toFixed(1)} dirty per day`:'Not enough logged days yet'}${avgChanges!=null?` · ${avgChanges.toFixed(1)} changes/day`:''}</div>
+    ${cmp ? `<div class="insight-item">${cmp}</div>` : ''}
+    ${baselineNote ? `<div class="insight-item">${baselineNote}</div>` : ''}
+  `;
+}
+function renderWeekRhythm(){
+  const todayKey = sydDateKey();
+  const dayKeys = get7DayKeys(weekOffset);
+  const sleepBuckets = buildSleepWeek(dayKeys);
+  const feedBuckets = buildFeedWeek(dayKeys);
+  const nappyBuckets = buildNappyWeek(dayKeys);
+  const sleepAvg = weekAverageExcludingToday(sleepBuckets, 'totalMin', todayKey);
+  const feedAvg = weekAverageExcludingToday(feedBuckets, 'babyFeedCount', todayKey);
+  const wetAvg = weekAverageExcludingToday(nappyBuckets, 'wetOut', todayKey);
+  let metricSection;
+  if(weekMetric==='feed') metricSection = renderFeedWeekView(feedBuckets, dayKeys, todayKey);
+  else if(weekMetric==='nappy') metricSection = renderNappyWeekView(nappyBuckets, dayKeys, todayKey);
+  else metricSection = renderSleepWeekView(sleepBuckets, dayKeys, todayKey);
+  return `
+    <div class="card">
+      <h2>7-Day Summary</h2>
+      <div class="meta-text" style="margin-top:-6px;margin-bottom:10px;">${weekRangeLabel(dayKeys)}</div>
+      <div class="stat-row" style="margin-top:0;">
+        <div class="stat-cell"><div class="stat-val">${sleepAvg!=null?fmtDuration(sleepAvg):'—'}</div><div class="stat-lbl">Sleep/day</div></div>
+        <div class="stat-div"></div>
+        <div class="stat-cell"><div class="stat-val">${feedAvg!=null?feedAvg.toFixed(1):'—'}</div><div class="stat-lbl">Feeds/day</div></div>
+        <div class="stat-div"></div>
+        <div class="stat-cell"><div class="stat-val">${wetAvg!=null?wetAvg.toFixed(1):'—'}</div><div class="stat-lbl">Wet/day</div></div>
+      </div>
+      <div class="segctl" id="weekMetricSeg" role="tablist" style="margin-top:16px;">
+        <button data-wm="sleep" role="tab" aria-selected="${weekMetric==='sleep'}" class="${weekMetric==='sleep'?'active':''}">Sleep</button>
+        <button data-wm="feed" role="tab" aria-selected="${weekMetric==='feed'}" class="${weekMetric==='feed'?'active':''}">Feeding</button>
+        <button data-wm="nappy" role="tab" aria-selected="${weekMetric==='nappy'}" class="${weekMetric==='nappy'?'active':''}">Nappies</button>
+      </div>
+      ${metricSection}
+      <div style="display:flex;justify-content:space-between;margin-top:14px;">
+        <button class="ql-link" id="weekPrevBtn" style="padding:4px 0;">‹ Previous 7 days</button>
+        ${weekOffset>0 ? `<button class="ql-link" id="weekNextBtn" style="padding:4px 0;">This week ›</button>` : ''}
+      </div>
+    </div>
+  `;
+}
+function bindWeekRhythm(){
+  document.querySelectorAll('#weekMetricSeg [data-wm]').forEach(b=>{
+    b.addEventListener('click', ()=>{ weekMetric=b.dataset.wm; weekActiveIdx=null; renderMain(); });
+  });
+  document.querySelectorAll('.week-bar-tap').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const idx = parseInt(el.dataset.idx,10);
+      weekActiveIdx = weekActiveIdx===idx ? null : idx;
+      renderMain();
+    });
+  });
+  const prevBtn = document.getElementById('weekPrevBtn');
+  if(prevBtn) prevBtn.addEventListener('click', ()=>{ weekOffset++; weekActiveIdx=null; renderMain(); });
+  const nextBtn = document.getElementById('weekNextBtn');
+  if(nextBtn) nextBtn.addEventListener('click', ()=>{ weekOffset=Math.max(0,weekOffset-1); weekActiveIdx=null; renderMain(); });
+}
 function renderCare(){
   const feeds = state.feeds.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
   const sleeps = state.sleeps.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
@@ -2755,22 +3281,8 @@ function renderCare(){
 
     ${renderBaselineCard()}
 
-    <div class="card">
-      <h2>Last 7 days</h2>
-      <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
-        <div class="stat"><span class="val">${ws.feedsPerDay7.toFixed(1)}</span><span class="lbl">Feeds / day</span></div>
-        <div class="stat"><span class="val">${ws.avgSleepPer24h ? fmtDuration(ws.avgSleepPer24h) : '—'}</span><span class="lbl">Sleep / 24h avg</span></div>
-        <div class="stat"><span class="val">${ws.wet7PerDay.toFixed(1)} / ${ws.dirty7PerDay.toFixed(1)}</span><span class="lbl">Wet / dirty per day</span></div>
-        <div class="stat"><span class="val">${ws.longestSleep7 ? fmtDuration(ws.longestSleep7) : '—'}</span><span class="lbl">Longest sleep</span></div>
-      </div>
-      <div class="note" style="margin-top:10px;">
-        ${ws.totalNursingMin7 ? `Total nursing: ${fmtDuration(ws.totalNursingMin7)}${ws.avgInterval7!=null?` · avg interval ${fmtDuration(ws.avgInterval7)}`:''}<br>` : ''}
-        ${ws.formulaMl7 ? `Formula: ${ws.formulaMl7} mL total<br>` : ''}
-        ${ws.expressedMl7 ? `Expressed milk: ${ws.expressedMl7} mL total<br>` : ''}
-        ${ws.pumpingMl7 ? `Pumping: ${ws.pumpingMl7} mL total<br>` : ''}
-        ${ws.weightChange7 ? `Weight: ${ws.weightChange7.diff>=0?'+':''}${ws.weightChange7.diff.toFixed(2)} kg over ${Math.round(ws.weightChange7.days)} days (${ws.weightChange7.gramsPerDay!=null?(ws.weightChange7.gramsPerDay>=0?'+':'')+ws.weightChange7.gramsPerDay.toFixed(1)+' g/day':''})` : ''}
-      </div>
-    </div>
+    ${renderWeekRhythm()}
+    ${ws.weightChange7 ? `<div class="meta-text" style="margin:-8px 2px 14px;">Weight: ${ws.weightChange7.diff>=0?'+':''}${ws.weightChange7.diff.toFixed(2)} kg over ${Math.round(ws.weightChange7.days)} days${ws.weightChange7.gramsPerDay!=null?` (${ws.weightChange7.gramsPerDay>=0?'+':''}${ws.weightChange7.gramsPerDay.toFixed(1)} g/day)`:''}</div>` : ''}
 
     <div class="card">
       <h2>Insights</h2>
@@ -2810,6 +3322,7 @@ function renderCare(){
 function bindCare(){
   const back = document.getElementById('careBack');
   if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
+  bindWeekRhythm();
   bindDeletes();
 }
 
