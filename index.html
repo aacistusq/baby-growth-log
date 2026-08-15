@@ -743,6 +743,7 @@ let currentHealthCat = 'note';
 let timelineFilter = 'all';
 let expandedVaccineId = null;
 let markingGivenId = null;
+let editingVaccineId = null;
 let expandedApptId = null;
 let completingApptId = null;
 let sheetOpen = false;
@@ -2232,20 +2233,34 @@ function lastSleepInfo(){
   const end = new Date(new Date(s.date).getTime() + (s.mins||0)*60000);
   return { line: `${s.label==='nap'?'☀️ Nap':'🌙 Night'} · Slept ${fmtDuration(s.mins)}`, sub: `Ended ${timeAgo(end.toISOString())}` };
 }
-function nappyCountsToday(){
-  const todayStr = sydDateKey();
-  const todays = state.nappies.filter(n=> sydDateKey(n.date)===todayStr);
-  let wet=0,dirty=0;
-  todays.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet++; if(n.type==='poo'||n.type==='both') dirty++; });
-  return {wet, dirty};
+/* Canonical nappy aggregation — every nappy stat anywhere in the app must be
+   derived from computeNappyStats() over the right set of records, never
+   re-implemented ad hoc. wetContainingCount/dirtyContainingCount overlap
+   (a "both" nappy counts toward both) and are NOT meant to sum to changeCount. */
+function computeNappyStats(nappies){
+  let wetOnlyCount=0, dirtyOnlyCount=0, bothCount=0;
+  nappies.forEach(n=>{
+    if(n.type==='wet') wetOnlyCount++;
+    else if(n.type==='poo') dirtyOnlyCount++;
+    else if(n.type==='both') bothCount++;
+  });
+  return {
+    changeCount: nappies.length,
+    wetContainingCount: wetOnlyCount+bothCount,
+    dirtyContainingCount: dirtyOnlyCount+bothCount,
+    wetOnlyCount, dirtyOnlyCount, bothCount,
+    wet: wetOnlyCount+bothCount, dirty: dirtyOnlyCount+bothCount // aliases for existing call sites
+  };
 }
-function nappyCounts24h(){
-  const cutoff = Date.now()-86400000;
-  const recent = state.nappies.filter(n=> new Date(n.date).getTime()>=cutoff);
-  let wet=0,dirty=0;
-  recent.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet++; if(n.type==='poo'||n.type==='both') dirty++; });
-  return {wet,dirty};
+function getDailyNappyStats(dateRef){
+  const dayStr = sydDateKey(dateRef || new Date());
+  return computeNappyStats(state.nappies.filter(n=> sydDateKey(n.date)===dayStr));
 }
+function getNappyStatsForPeriod(startMs, endMs){
+  return computeNappyStats(state.nappies.filter(n=>{ const t=new Date(n.date).getTime(); return t>=startMs && t<endMs; }));
+}
+function nappyCountsToday(){ return getDailyNappyStats(); }
+function nappyCounts24h(){ return getNappyStatsForPeriod(Date.now()-86400000, Date.now()); }
 function weightSinceBirth(){
   const list = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
   if(!list.length) return null;
@@ -2927,7 +2942,7 @@ function dailySummary(dateRef){
     dayLabel: dateRef.toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ}),
     feedCount: feedsToday.length, totalNursingMin, avgIntervalMin,
     totalSleepMin, sleepPeriods: overlapping.length, longestSleep, napMin, nightMin,
-    nappies: nappyCountsToday(), growthToday
+    nappies: getDailyNappyStats(dateRef), growthToday
   };
 }
 function weeklySummary(){
@@ -2947,8 +2962,7 @@ function weeklySummary(){
   const totalSleepMin7 = sleepWeek7.reduce((s,d)=>s+d.totalMin,0);
   const sleepPeriods7 = sleepWeek7.reduce((s,d)=>s+d.periods,0);
   const longestSleep7 = sleepWeek7.reduce((mx,d)=>Math.max(mx,d.longest),0);
-  const nappies7 = state.nappies.filter(n=> new Date(n.date).getTime()>=cutoff);
-  let wet7=0,dirty7=0; nappies7.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet7++; if(n.type==='poo'||n.type==='both') dirty7++; });
+  const nappyStats7 = getNappyStatsForPeriod(cutoff, Date.now());
   const weightList = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
   let weightChange7 = null;
   if(weightList.length>=2){
@@ -2962,7 +2976,7 @@ function weeklySummary(){
   return {
     feedsPerDay7: feeds7.length/7, avgInterval7, totalNursingMin7, expressedMl7, formulaMl7, pumpingMl7,
     avgSleepPer24h: totalSleepMin7/7, sleepPeriods7, longestSleep7,
-    wet7PerDay: wet7/7, dirty7PerDay: dirty7/7, weightChange7
+    wet7PerDay: nappyStats7.wet/7, dirty7PerDay: nappyStats7.dirty/7, weightChange7
   };
 }
 /* ================= Smart Insight Engine =================
@@ -3212,11 +3226,15 @@ function baselineStats(days){
     const d = new Date(); d.setDate(d.getDate()-i);
     daily.push(dailySummary(d));
   }
-  const active = daily.filter(d=> d.feedCount>0 || d.nappies.wet>0 || d.nappies.dirty>0 || d.totalSleepMin>0);
+  const active = daily.filter(d=> d.feedCount>0 || d.nappies.changeCount>0 || d.totalSleepMin>0);
   if(active.length < MIN_BASELINE_DAYS) return null;
   const feedCounts = active.map(d=>d.feedCount).sort((a,b)=>a-b);
-  const wetCounts = active.map(d=>d.nappies.wet).sort((a,b)=>a-b);
-  const dirtyCounts = active.map(d=>d.nappies.dirty).sort((a,b)=>a-b);
+  /* Nappy range must come from days nappies were actually logged — a day with
+     only feeds/sleep logged shouldn't pad the "active" count toward a nappy
+     range that's really based on too few real nappy days. */
+  const nappyDays = active.filter(d=>d.nappies.changeCount>0);
+  const wetCounts = nappyDays.map(d=>d.nappies.wet).sort((a,b)=>a-b);
+  const dirtyCounts = nappyDays.map(d=>d.nappies.dirty).sort((a,b)=>a-b);
   const sleepMins = active.map(d=>d.totalSleepMin).sort((a,b)=>a-b);
   const longestSleeps = active.filter(d=>d.longestSleep>0).map(d=>d.longestSleep).sort((a,b)=>a-b);
   const intervals = active.filter(d=>d.avgIntervalMin!=null).map(d=>d.avgIntervalMin).sort((a,b)=>a-b);
@@ -3224,8 +3242,9 @@ function baselineStats(days){
   return {
     days: active.length,
     feeds: rangeOf(feedCounts),
-    wet: rangeOf(wetCounts),
-    dirty: rangeOf(dirtyCounts),
+    wet: nappyDays.length>=MIN_BASELINE_DAYS ? rangeOf(wetCounts) : null,
+    dirty: nappyDays.length>=MIN_BASELINE_DAYS ? rangeOf(dirtyCounts) : null,
+    nappyDaysInsufficient: nappyDays.length>0 && nappyDays.length<MIN_BASELINE_DAYS,
     sleepMin: rangeOf(sleepMins),
     longestSleep: rangeOf(longestSleeps),
     interval: rangeOf(intervals)
@@ -3278,6 +3297,7 @@ function renderBaselineCard(){
       ${b.feeds ? `<div class="rline">🍼 ${Math.round(b.feeds.p25)}–${Math.round(b.feeds.p75)} feeds/day</div>` : ''}
       ${b.wet ? `<div class="rline">💧 ${Math.round(b.wet.p25)}–${Math.round(b.wet.p75)} wet nappies/day</div>` : ''}
       ${b.dirty ? `<div class="rline">💩 ${Math.round(b.dirty.p25)}–${Math.round(b.dirty.p75)} dirty nappies/day</div>` : ''}
+      ${b.nappyDaysInsufficient ? `<div class="meta-text">More complete days needed to establish her recent nappy pattern.</div>` : ''}
       ${b.sleepMin ? `<div class="rline">😴 ${fmtDuration(b.sleepMin.p25)}–${fmtDuration(b.sleepMin.p75)} sleep/day</div>` : ''}
       ${b.longestSleep ? `<div class="rline">🌙 Longest sleep usually ${fmtDuration(b.longestSleep.p25)}–${fmtDuration(b.longestSleep.p75)}</div>` : ''}
       <div class="note" style="margin-top:10px;">This reflects what's recently been typical for ${escapeHtml(state.profile.name)} — not a medical recommendation, and it never overrides safety guidance like the fever warning above.</div>
@@ -3437,7 +3457,7 @@ function compareToPreviousWeek(metric){
    deterministic JS against the real records, reusing the same aggregation
    functions used everywhere else in the app, and the final answer text is
    built entirely from those computed values via string templates. */
-const ASK_KNOWN_TYPES = ['lastEvent','countInRange','totalInRange','maxInRange','bestDay','growthChange','weekCompare','dayShowAll','unanswerable','unknown'];
+const ASK_KNOWN_TYPES = ['lastEvent','countInRange','totalInRange','maxInRange','minInRange','bestDay','growthChange','weekCompare','dayShowAll','breastSide','nextEvent','listGiven','healthOverview','unanswerable','unknown'];
 const ASK_MEDICAL_PATTERN = /\b(enough milk|getting enough|low (milk )?supply|milk supply|reflux|dehydrat|overtired|is (this|that|she|it) normal|should i (be )?worry|is she (sick|ill|okay|ok)|diagnos|colic|allerg|intoleran|teething|constipat|underweight|overweight|failure to thrive)\b/i;
 function looksLikeMedicalQuestion(q){ return ASK_MEDICAL_PATTERN.test(q); }
 function resolveAskRange(range){
@@ -3445,9 +3465,13 @@ function resolveAskRange(range){
   if(!range || !range.kind) return { startMs: now-7*86400000, endMs: now, label:'over the last 7 days' };
   if(range.kind==='today') return { startMs: sydMidnightUTC(sydDateKey()), endMs: now, label:'today' };
   if(range.kind==='yesterday'){ const yk=sydDateKey(now-86400000); return { startMs: sydMidnightUTC(yk), endMs: sydMidnightUTC(yk)+86400000, label:'yesterday' }; }
+  if(range.kind==='lastNight'){ const yk=sydDateKey(now-86400000); return { startMs: sydMidnightUTC(yk)+18*3600000, endMs: sydMidnightUTC(sydDateKey())+12*3600000, label:'last night' }; }
   if(range.kind==='last24h') return { startMs: now-24*3600000, endMs: now, label:'in the last 24 hours' };
   if(range.kind==='thisWeek'){ const keys=get7DayKeys(0); return { startMs: sydMidnightUTC(keys[0]), endMs: now, label:'this week' }; }
   if(range.kind==='lastWeek'){ const keys=get7DayKeys(1); return { startMs: sydMidnightUTC(keys[0]), endMs: sydMidnightUTC(keys[6])+86400000, label:'last week' }; }
+  if(range.kind==='thisMonth'){ const {start}=monthBoundsMs(currentYearMonth()); return { startMs:start, endMs: now, label:'this month' }; }
+  if(range.kind==='lastMonth'){ const ym=shiftYearMonth(currentYearMonth(),-1); const {start,end}=monthBoundsMs(ym); return { startMs:start, endMs:end, label:'last month' }; }
+  if(range.kind==='sinceBirth') return { startMs: new Date(state.profile.birthDate).getTime(), endMs: now, label:'since birth' };
   if(range.kind==='date' && range.date){ return { startMs: sydMidnightUTC(range.date), endMs: sydMidnightUTC(range.date)+86400000, label:`on ${fmtDateFull(range.date+'T12:00:00')}` }; }
   return { startMs: now-7*86400000, endMs: now, label:'over the last 7 days' };
 }
@@ -3483,6 +3507,9 @@ function executeLastEvent(intent){
     const list = state.sleeps.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
     if(!list.length) return { answer:'No sleep has been logged yet.', evidence:null };
     const s = list[0];
+    if(intent.startOrEnd==='start'){
+      return { answer:`Her last sleep began ${timeAgo(s.date)} — ${fmtDateTime(s.date)} (${fmtDuration(s.mins)} ${s.label==='nap'?'nap':'night sleep'}).`, evidence:[{label:'Started',value:fmtDateTime(s.date)},{label:'Duration',value:fmtDuration(s.mins)}] };
+    }
     const endISO = s.endAt || new Date(new Date(s.date).getTime()+(s.mins||0)*60000).toISOString();
     return { answer:`Her last sleep ended ${timeAgo(endISO)} — ${fmtDuration(s.mins)} (${s.label==='nap'?'nap':'night sleep'}).`, evidence:[{label:'Duration',value:fmtDuration(s.mins)},{label:'Started',value:fmtDateTime(s.date)}] };
   }
@@ -3496,13 +3523,18 @@ function executeLastEvent(intent){
     const type = subtype||'weight';
     const m = latestOf(type);
     if(!m) return { answer:`No ${labelType(type).toLowerCase()} has been logged yet.`, evidence:null };
-    return { answer:`Her last ${labelType(type).toLowerCase()} measurement was ${m.value}${unitFor(type)}, logged ${fmtDate(m.date)}.`, evidence:[{label:labelType(type),value:m.value+unitFor(type)},{label:'Date',value:fmtDate(m.date)}] };
+    const ageM = ageMonthsDecimal(state.profile.birthDate, m.date);
+    const row = interpolateRow(TYPE_TO_TABLE[type], ageM);
+    const score = Math.round(percentileScore(row, m.value));
+    return { answer:`Her latest logged ${labelType(type).toLowerCase()} is ${m.value}${unitFor(type)}, recorded on ${fmtDate(m.date)}, around the ${ordinalSuffix(score)} percentile.`, evidence:[{label:labelType(type),value:m.value+unitFor(type)},{label:'Date',value:fmtDate(m.date)}] };
   }
   if(metric==='vaccine'){
-    const list = state.vaccines.filter(v=>v.givenDate).sort((a,b)=>new Date(b.givenDate)-new Date(a.givenDate));
-    if(!list.length) return { answer:'No vaccines have been recorded as given yet.', evidence:null };
+    let list = state.vaccines.filter(v=>v.givenDate);
+    if(intent.nameHint) list = list.filter(v=> v.name.toLowerCase().includes(intent.nameHint));
+    list.sort((a,b)=>new Date(b.givenDate)-new Date(a.givenDate));
+    if(!list.length) return { answer: intent.nameHint ? `No record of that vaccine being given yet.` : 'No vaccines have been recorded as given yet.', evidence:null };
     const v = list[0];
-    return { answer:`Her last recorded vaccine was ${v.name}${v.dose?' ('+v.dose+')':''}, given ${fmtDate(v.givenDate)}.`, evidence:null };
+    return { answer:`${intent.nameHint?v.name+(v.dose?' ('+v.dose+')':''):'Her last recorded vaccine was '+v.name+(v.dose?' ('+v.dose+')':'')} was given ${fmtDate(v.givenDate)}.`, evidence:null };
   }
   if(metric==='appointment'){
     const list = state.appointments.filter(a=>a.status==='completed').sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -3569,6 +3601,58 @@ function executeMaxInRange(intent){
   }
   return { answer:"I couldn't find a maximum for that.", evidence:null };
 }
+function executeMinInRange(intent){
+  const {metric, range} = intent;
+  const r = resolveAskRange(range);
+  if(metric==='sleep'){
+    const list = effectiveSleepRecords().filter(s=> sleepMinutesInRange(s, r.startMs, r.endMs)>0.5);
+    if(!list.length) return { answer:`No sleep logged ${r.label}.`, evidence:null };
+    const shortest = list.reduce((mn,s)=> (s.mins||0)<(mn?mn.mins:Infinity)?s:mn, null);
+    return { answer:`Her shortest sleep ${r.label} was ${fmtDuration(shortest.mins)}, starting ${fmtDateTime(shortest.date)}.`, evidence:list.map(s=>({label:fmtDateTime(s.date),value:fmtDuration(s.mins)})) };
+  }
+  return { answer:"I couldn't find a minimum for that.", evidence:null };
+}
+function executeBreastSide(intent){
+  const breastfeeds = state.feeds.map(normalizeFeed).filter(f=>f.type==='breastfeeding').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(intent.mode==='last'){
+    if(!breastfeeds.length) return { answer:"No breastfeeding sessions logged yet.", evidence:null };
+    const f = breastfeeds[0];
+    const side = (f.leftMins>0 && f.rightMins>0) ? 'both sides' : f.leftMins>f.rightMins ? 'the left side' : f.rightMins>f.leftMins ? 'the right side' : 'an unspecified side';
+    return { answer:`Her last breastfeeding session used ${side}, ${timeAgo(f.date)} (${fmtDateTime(f.date)}).`, evidence:null };
+  }
+  const r = resolveAskRange(intent.range);
+  const inRange = breastfeeds.filter(f=>{ const t=new Date(f.date).getTime(); return t>=r.startMs && t<r.endMs; });
+  const totalLeft = inRange.reduce((s,f)=>s+(f.leftMins||0),0), totalRight = inRange.reduce((s,f)=>s+(f.rightMins||0),0);
+  if(totalLeft+totalRight===0) return { answer:`No breastfeeding logged ${r.label}.`, evidence:null };
+  if(totalLeft===totalRight) return { answer:`Both sides were used about equally ${r.label} (${Math.round(totalLeft)} min left, ${Math.round(totalRight)} min right).`, evidence:null };
+  const more = totalLeft>totalRight?'left':'right';
+  const moreMin = Math.round(more==='left'?totalLeft:totalRight), lessMin = Math.round(more==='left'?totalRight:totalLeft);
+  return { answer:`The ${more} side was used more ${r.label} — ${moreMin} min vs ${lessMin} min.`, evidence:null };
+}
+function executeNextEvent(intent){
+  if(intent.metric==='vaccine'){
+    const due = state.vaccines.filter(v=>!v.givenDate && !v.notApplicable && !v.hidden).map(v=>({v, due:vaccineDueDate(v)})).sort((a,b)=>a.due-b.due)[0];
+    if(!due) return { answer:"No upcoming vaccines due.", evidence:null };
+    return { answer:`Her next vaccine is ${due.v.name}${due.v.dose?' ('+due.v.dose+')':''}, due around ${due.due?fmtDate(due.due.toISOString()):due.v.dueMonths+' months'}.`, evidence:null };
+  }
+  if(intent.metric==='appointment'){
+    const next = state.appointments.filter(a=>(a.status||'upcoming')==='upcoming' && new Date(a.date)>=new Date()).sort((a,b)=>new Date(a.date)-new Date(b.date))[0];
+    if(!next) return { answer:"No upcoming appointments scheduled.", evidence:null };
+    return { answer:`Her next appointment is "${next.title}" on ${fmtDateFull(next.date)}.`, evidence:null };
+  }
+  return { answer:"I couldn't find what's next for that.", evidence:null };
+}
+function executeListGiven(intent){
+  if(intent.metric==='vaccine'){
+    const given = state.vaccines.filter(v=>v.givenDate).sort((a,b)=>new Date(a.givenDate)-new Date(b.givenDate));
+    if(!given.length) return { answer:"No vaccines recorded as given yet.", evidence:null };
+    return { answer:`${given.length} vaccine${given.length===1?'':'s'} given so far.`, evidence: given.map(v=>({label:fmtDate(v.givenDate), value:v.name+(v.dose?' ('+v.dose+')':'')})) };
+  }
+  return { answer:"I couldn't find a list for that.", evidence:null };
+}
+function executeHealthOverview(){
+  return { answer:"I can show her logged temperature, vaccines, appointments, or health notes — try asking about one of those specifically.", evidence:null };
+}
 function executeBestDay(intent){
   const keys = get7DayKeys(0), todayKey = sydDateKey();
   const fmtDay = k=> new Date(k+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short',timeZone:APP_TZ});
@@ -3632,7 +3716,7 @@ function executeUnanswerable(){
   return { answer:`That's not something the tracker can determine from logged feeds, nappies, sleep, or growth data — it can't assess milk transfer, diagnose a condition, or judge whether something is medically normal. If you're concerned, it's worth checking with your GP or child health nurse. I can show you her logged feeding, sleep, nappy, or growth data if that would help instead.`, evidence:null };
 }
 function executeUnknown(){
-  return { answer:`I couldn't quite work out what you were asking. Try something like "When did she last poo?", "How much did she sleep yesterday?", or "What was her longest sleep this week?"`, evidence:null };
+  return { answer:`I can answer questions about her growth, sleep, feeds, nappies, vaccinations, appointments and logged health history. Try asking something like "Her weight?", "Sleep today?" or "Last poo?"`, evidence:null };
 }
 function executeAskIntent(intent){
   switch(intent.type){
@@ -3640,10 +3724,15 @@ function executeAskIntent(intent){
     case 'countInRange': return executeCountInRange(intent);
     case 'totalInRange': return executeTotalInRange(intent);
     case 'maxInRange': return executeMaxInRange(intent);
+    case 'minInRange': return executeMinInRange(intent);
     case 'bestDay': return executeBestDay(intent);
     case 'growthChange': return executeGrowthChange(intent);
     case 'weekCompare': return executeWeekCompare();
     case 'dayShowAll': return executeDayShowAll(intent);
+    case 'breastSide': return executeBreastSide(intent);
+    case 'nextEvent': return executeNextEvent(intent);
+    case 'listGiven': return executeListGiven(intent);
+    case 'healthOverview': return executeHealthOverview();
     case 'unanswerable': return executeUnanswerable();
     default: return executeUnknown();
   }
@@ -3664,10 +3753,14 @@ function parseAskDate(s){
   return `${year}-${String(monthIdx+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 }
 function detectAskRange(s){
+  if(/\blast night\b|\btonight\b/.test(s)) return {kind:'lastNight'};
   if(/\byesterday\b/.test(s)) return {kind:'yesterday'};
   if(/\blast\s*24\s*hours?\b/.test(s)) return {kind:'last24h'};
-  if(/\blast\s*week\b/.test(s)) return {kind:'lastWeek'};
+  if(/\bsince (she was )?born\b|\bsince birth\b|\bever\b|\ball time\b/.test(s)) return {kind:'sinceBirth'};
+  if(/\blast\s*week\b|\bprevious week\b/.test(s)) return {kind:'lastWeek'};
   if(/\bthis\s*week\b/.test(s)) return {kind:'thisWeek'};
+  if(/\blast month\b/.test(s)) return {kind:'lastMonth'};
+  if(/\bthis month\b/.test(s)) return {kind:'thisMonth'};
   if(/\btoday\b/.test(s)) return {kind:'today'};
   const d = parseAskDate(s);
   if(d) return {kind:'date', date:d};
@@ -3680,86 +3773,246 @@ function detectTimeOfDay(s){
   if(/\bevening\b/.test(s)) return 'evening';
   return null;
 }
+/* ---- Text normalization ---- */
+function normalizeAskText(q){
+  let s = (q||'').toLowerCase().trim();
+  s = s.replace(/what's/g,'what is').replace(/how's/g,'how is').replace(/she's/g,'she is')
+       .replace(/didn't/g,'did not').replace(/doesn't/g,'does not').replace(/hasn't/g,'has not')
+       .replace(/isn't/g,'is not').replace(/wasn't/g,'was not').replace(/aren't/g,'are not');
+  s = s.replace(/[?!.,;:]+/g,' ').replace(/-/g,' ').replace(/\s+/g,' ').trim();
+  return s;
+}
+/* ---- Domain synonym maps — deliberately broad so many natural phrasings
+   converge on the same topic without needing exact predefined wording ---- */
+const ASK_DOMAINS = {
+  weight: ['weight','weigh','weighs','weighed','weighing','heavy','kg','kilo','kilos'],
+  length: ['length','tall','height'],
+  hc: ['head circumference','circumference'],
+  sleep: ['sleep','slept','sleeping','asleep','nap','naps','napped','night sleep','wake','woke','waking'],
+  feed: ['feed','feeding','fed','feeds','breastfeed','breastfed','breastfeeding','nurse','nursed','nursing','milk','bottle','formula'],
+  nappy: ['nappy','nappies','diaper','diapers','poo','poop','pooped','stool','dirty','bm','bowel','wet','wee','pee','urine'],
+  growth: ['growth','growing','gain','gained','percentile','grown'],
+  temperature: ['temperature','temp','fever'],
+  vaccine: ['vaccine','vaccination','vaccinated','shot','jab','immunisation','immunization'],
+  appointment: ['appointment','checkup','check-up','visit'],
+  health: ['health','symptom','medication'],
+  moments: ['moment','moments','photo','photos','milestone']
+};
+/* ---- Operation synonym maps ---- */
+const ASK_OPERATIONS = {
+  latest: ['current','latest','currently','now'],
+  count: ['how many','number of','count','times'],
+  total: ['how much','how long','total','duration'],
+  max: ['longest','most','highest','maximum'],
+  min: ['shortest','least','lowest','minimum'],
+  average: ['average','usually','typical','normally'],
+  change: ['changed','change','gained','increased','decreased','difference'],
+  compare: ['compare','more than','less than','versus',' vs ']
+};
+function levenshtein(a,b){
+  /* Damerau-Levenshtein — counts an adjacent-letter swap ("weigth") as a
+     single edit rather than two, which matches real typos far better than
+     plain Levenshtein and, combined with a strict max-distance-1 threshold,
+     avoids accidental collisions between unrelated words (e.g. "nappies"
+     no longer fuzzy-matches "napped" — that needs 2 edits either way). */
+  const m=a.length, n=b.length;
+  if(!m) return n; if(!n) return m;
+  const dp = [];
+  for(let i=0;i<=m;i++) dp.push(new Array(n+1).fill(0));
+  for(let i=0;i<=m;i++) dp[i][0]=i;
+  for(let j=0;j<=n;j++) dp[0][j]=j;
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      const cost = a[i-1]===b[j-1] ? 0 : 1;
+      dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+cost);
+      if(i>1 && j>1 && a[i-1]===b[j-2] && a[i-2]===b[j-1]) dp[i][j] = Math.min(dp[i][j], dp[i-2][j-2]+cost);
+    }
+  }
+  return dp[m][n];
+}
+/* Deliberately strict — one edit, and only for words of real length — so
+   genuine typos ("weigth","slepp","napies","feedng") are caught without
+   short or common words accidentally colliding with an unrelated domain. */
+function fuzzyWordMatch(word, target){
+  if(word===target) return true;
+  if(target.length<5 || Math.abs(word.length-target.length)>1) return false;
+  return levenshtein(word,target)<=1;
+}
+function scoreDomains(norm){
+  const tokens = norm.split(' ').filter(Boolean);
+  const scores = {};
+  Object.entries(ASK_DOMAINS).forEach(([domain, words])=>{
+    let score = 0;
+    words.forEach(w=>{
+      if(w.includes(' ')){ if(norm.includes(w)) score += 3; return; }
+      if(tokens.some(t=>fuzzyWordMatch(t,w))) score += 2;
+    });
+    if(score>0) scores[domain]=score;
+  });
+  return scores;
+}
+function scoreOperations(norm){
+  const scores = {};
+  Object.entries(ASK_OPERATIONS).forEach(([op, words])=>{
+    let score = 0;
+    words.forEach(w=>{ if(norm.includes(w)) score += w.includes(' ')?3:2; });
+    if(score>0) scores[op]=score;
+  });
+  return scores;
+}
+function detectNappySubtype(norm){
+  if(/\bpoo\b|\bpoop|\bstool\b|\bdirty\b|\bbowel\b|\bbm\b/.test(norm)) return 'dirty';
+  if(/\bwet\b|\bwee\b|\bpee\b|\burine\b/.test(norm)) return 'wet';
+  return null;
+}
+function extractVaccineNameHint(norm){
+  if(/\bhep\s*b\b|\bhepatitis b\b/.test(norm)) return 'hepatitis b';
+  const names = [...new Set(state.vaccines.map(v=>v.name.toLowerCase()))];
+  for(const name of names){
+    const words = name.split(/\s+/).filter(w=>w.length>3);
+    if(words.some(w=>norm.includes(w))) return name;
+  }
+  return null;
+}
+const ASK_DOMAIN_LABELS = {weight:'Weight', length:'Length', hc:'Head circumference', sleep:'Sleep', feed:'Feeds', nappy:'Nappies', growth:'Growth', temperature:'Temperature', vaccine:'Vaccines', appointment:'Appointments', health:'Health', moments:'Moments'};
+/* Maps a resolved (domain, operation, range) triple onto the same intent
+   shapes the executors already understand — this is the single seam between
+   "understanding the question" and "running the deterministic query", so
+   nothing about how an answer is calculated changes based on how the
+   question was phrased. */
+function buildIntentFromDomainOp(domain, operation, range, norm){
+  norm = norm || '';
+  if(domain==='weight'||domain==='length'||domain==='hc'){
+    if(operation==='change') return {type:'growthChange', measure:domain};
+    return {type:'lastEvent', metric:'measurement', subtype:domain};
+  }
+  if(domain==='growth') return {type:'growthChange', measure:'weight'};
+  if(domain==='sleep'){
+    if(/\b(is she |still )?(sleeping|asleep)\b/.test(norm) && /\bnow\b|\bcurrently\b|\bstill\b/.test(norm)) return {type:'lastEvent', metric:'sleep'};
+    if(operation==='max') return {type:'maxInRange', metric:'sleep', range: range||{kind:'thisWeek'}};
+    if(operation==='min') return {type:'minInRange', metric:'sleep', range: range||{kind:'thisWeek'}};
+    if(operation==='count') return {type:'countInRange', metric:'sleep', range: range||{kind:'today'}};
+    if(operation==='latest' || /^when\b/.test(norm)){
+      const startOrEnd = /\bgo to sleep\b|\bfell asleep\b|\bfall asleep\b|\bwent to sleep\b/.test(norm) ? 'start' : 'end';
+      return {type:'lastEvent', metric:'sleep', startOrEnd};
+    }
+    return {type:'totalInRange', metric:'sleep', range: range||{kind:'today'}};
+  }
+  if(domain==='feed'){
+    if(/\bbreast\b/.test(norm) && /\bleft\b|\bright\b/.test(norm)) return {type:'breastSide', mode: range?'compare':'last', range: range||{kind:'thisWeek'}};
+    if(operation==='latest' || /^when\b|\blast feed\b/.test(norm)) return {type:'lastEvent', metric:'feed'};
+    if(operation==='max' || /\bwhich day\b/.test(norm)) return {type:'bestDay', metric:'feed'};
+    if(operation==='total') return {type:'totalInRange', metric:'feed', range: range||{kind:'today'}};
+    const subtype = /\bbreastfeed|\bnurs/.test(norm) ? 'breastfeeding' : /\bformula\b/.test(norm) ? 'formula' : null;
+    return {type:'countInRange', metric:'feed', range: range||{kind:'today'}, subtype};
+  }
+  if(domain==='nappy'){
+    const subtype = detectNappySubtype(norm);
+    if(operation==='latest' || /^when\b|\bhas she\b/.test(norm)) return {type:'lastEvent', metric:'nappy', subtype};
+    if(operation==='max' || /\bwhich day\b/.test(norm)) return {type:'bestDay', metric:'nappy'};
+    return {type:'countInRange', metric:'nappy', subtype, range: range||{kind:'today'}};
+  }
+  if(domain==='temperature') return {type:'lastEvent', metric:'temperature'};
+  if(domain==='vaccine'){
+    if(/\bwhat vaccines\b|\bwhich vaccines\b|\ball vaccines\b|\bvaccines has she had\b/.test(norm)) return {type:'listGiven', metric:'vaccine'};
+    const nameHint = extractVaccineNameHint(norm);
+    if(nameHint || operation==='latest' || /^when did she get\b|\bwhen was\b/.test(norm)) return {type:'lastEvent', metric:'vaccine', nameHint};
+    return {type:'nextEvent', metric:'vaccine'};
+  }
+  if(domain==='appointment'){
+    if(operation==='latest' || /^when did\b|\blast appointment\b/.test(norm)) return {type:'lastEvent', metric:'appointment'};
+    return {type:'nextEvent', metric:'appointment'};
+  }
+  if(domain==='moments') return {type:'lastEvent', metric:'moment'};
+  if(domain==='health') return {type:'healthOverview'};
+  return {type:'unknown'};
+}
 /* Fully local, deterministic intent classifier — no network call, no model in
-   the loop at all. Pattern-matches the question into the same strict intent
-   shapes the executors below expect. Covers the app's known question types;
-   anything it can't confidently match falls through to "unknown" rather than
-   guessing. */
+   the loop at all. Normalizes the question, scores it against domain and
+   operation synonym maps (with light fuzzy matching for typos), extracts
+   time context, and combines those signals into one of the app's fixed
+   intent shapes. Falls back to a genuine clarification prompt only when a
+   quantity is clearly being asked about but the topic itself is ambiguous —
+   never a silent guess. Retains one turn of conversational context so a
+   short follow-up like "and today?" can build on the previous question. */
+let askLastDomain = null, askLastOperation = null;
 function classifyAskIntentLocal(question){
-  const s = question.toLowerCase().trim();
+  const norm = normalizeAskText(question);
+  if(!norm) return {type:'unknown'};
 
-  if(/\bcompar\w*\b.*\bweek\b/.test(s) || (/\bthis week\b/.test(s) && /\blast week\b/.test(s))) return {type:'weekCompare'};
-
-  if(/\b(weight|grown|growth|length|height|head)\b.*\b(chang|since birth|from birth)\b/.test(s)){
-    let measure='weight';
-    if(/\blength|height\b/.test(s)) measure='length';
-    else if(/\bhead\b/.test(s)) measure='hc';
-    return {type:'growthChange', measure};
+  if(/\bcompar\w*\b.*\bweek\b/.test(norm) || (/\bthis week\b/.test(norm) && /\blast week\b/.test(norm))){
+    askLastDomain=null; askLastOperation=null;
+    return {type:'weekCompare'};
   }
 
-  if(/\bwhich day\b|\bbusiest day\b|\bmost (feeds|sleep|nappies|nappy changes)\b/.test(s)){
-    let metric='feed';
-    if(/\bsleep\b/.test(s)) metric='sleep';
-    else if(/\bnapp(y|ies)\b/.test(s)) metric='nappy';
-    return {type:'bestDay', metric};
-  }
-
-  if(/\blongest\b.*\bsleep\b|\bmax\w*\b.*\bsleep\b/.test(s)){
-    return {type:'maxInRange', metric:'sleep', range: detectAskRange(s) || {kind:'thisWeek'}};
-  }
-
-  if(/\beverything\b|\bwhat happened\b/.test(s)){
-    const d = parseAskDate(s);
+  if(/\beverything\b|\bwhat happened\b/.test(norm)){
+    const d = parseAskDate(norm);
     if(d) return {type:'dayShowAll', date:d};
   }
 
-  if(/\bhow many\b/.test(s)){
-    const timeOfDay = detectTimeOfDay(s);
-    const range = detectAskRange(s) || {kind:'last24h'};
-    if(/\bwet\b/.test(s)) return {type:'countInRange', metric:'nappy', subtype:'wet', range};
-    if(/\bdirty\b|\bpoo\b/.test(s)) return {type:'countInRange', metric:'nappy', subtype:'dirty', range};
-    if(/\bnapp(y|ies)\b/.test(s)) return {type:'countInRange', metric:'nappy', range};
-    if(/\bfeed\w*\b|\btimes\b/.test(s)) return {type:'countInRange', metric:'feed', range, timeOfDay};
-    if(/\bsleep\w*\b/.test(s)) return {type:'countInRange', metric:'sleep', range};
+  const range = detectAskRange(norm);
+
+  /* "Which breast" / "left vs right" questions don't necessarily contain any
+     word from the feed synonym list, so they're handled explicitly rather
+     than relying on domain scoring to find them. */
+  if(/\bwhich (breast|side)\b/.test(norm)) return {type:'breastSide', mode:'last'};
+  if(/\bleft\b/.test(norm) && /\bright\b/.test(norm)) return {type:'breastSide', mode: range?'compare':'last', range: range||{kind:'thisWeek'}};
+
+  /* A specific vaccine name mentioned by itself ("when did she get Hep B?")
+     may not contain any generic vaccine keyword at all, so name matching is
+     checked before falling back to keyword-based domain scoring. */
+  const vaccineNameHint = extractVaccineNameHint(norm);
+  if(vaccineNameHint && (/^when\b|\bdid she (get|have)\b|\bwas she given\b/.test(norm))){
+    return {type:'lastEvent', metric:'vaccine', nameHint:vaccineNameHint};
   }
 
-  if(/\bhow much\b.*\bsleep\b/.test(s)) return {type:'totalInRange', metric:'sleep', range: detectAskRange(s) || {kind:'yesterday'}};
-  if(/\bhow much\b.*\b(feed|nurs)\w*\b/.test(s)) return {type:'totalInRange', metric:'feed', range: detectAskRange(s) || {kind:'today'}};
+  const opScores = scoreOperations(norm);
+  const opEntries = Object.entries(opScores).sort((a,b)=>b[1]-a[1]);
+  const operation = opEntries.length ? opEntries[0][0] : null;
 
-  /* "last"/"latest" here means "most recent single event" — guarded against
-     "how many"/"how much" phrasing above, since "in the last 24 hours" would
-     otherwise be misread as a single-event lookup rather than a count. */
-  if(/\b(last|latest)\b/.test(s) || /^when\b/.test(s)){
-    if(/\b(poo|dirty|stool|bowel)\b/.test(s)) return {type:'lastEvent', metric:'nappy', subtype:'dirty'};
-    if(/\bwet\b.*nappy|\bwee\b|\bpee\b/.test(s)) return {type:'lastEvent', metric:'nappy', subtype:'wet'};
-    if(/\bnapp(y|ies)\b/.test(s)) return {type:'lastEvent', metric:'nappy'};
-    if(/\btemp(erature)?\b/.test(s)) return {type:'lastEvent', metric:'temperature'};
-    if(/\bweigh(t|ed|-in)?\b/.test(s)) return {type:'lastEvent', metric:'measurement', subtype:'weight'};
-    if(/\blength\b/.test(s)) return {type:'lastEvent', metric:'measurement', subtype:'length'};
-    if(/\bhead\b/.test(s)) return {type:'lastEvent', metric:'measurement', subtype:'hc'};
-    if(/\b(vaccin|shot|jab|immunis)\w*\b/.test(s)) return {type:'lastEvent', metric:'vaccine'};
-    if(/\bappointment\b/.test(s)) return {type:'lastEvent', metric:'appointment'};
-    if(/\bmoment\b/.test(s)) return {type:'lastEvent', metric:'moment'};
-    if(/\b(feed|fed|nurs|eat|ate|breastfe|bottle)\w*\b/.test(s)) return {type:'lastEvent', metric:'feed'};
-    if(/\b(sleep|slept|nap|wake|woke)\w*\b/.test(s)) return {type:'lastEvent', metric:'sleep'};
+  // one-level conversational follow-up: "and today?", "what about yesterday?", "and before that?"
+  if(/^(and|what about|and what about)\b/.test(norm) && askLastDomain){
+    if(range || /\bbefore that\b|\bprevious\b|\bearlier\b/.test(norm)){
+      return buildIntentFromDomainOp(askLastDomain, operation||askLastOperation, range, norm);
+    }
   }
 
-  return {type:'unknown'};
+  const domainScores = scoreDomains(norm);
+  const domainEntries = Object.entries(domainScores).sort((a,b)=>b[1]-a[1]);
+
+  if(!domainEntries.length){
+    // No topic recognised at all. If a quantity operation was clearly asked
+    // for, offer a genuine clarification rather than failing silently.
+    if(operation==='total') return {type:'clarify', options:['sleep','feed'], operation, range};
+    if(operation==='count') return {type:'clarify', options:['feed','nappy'], operation, range};
+    if(operation==='latest') return {type:'clarify', options:['weight','sleep','feed'], operation, range};
+    return {type:'unknown'};
+  }
+
+  const topScore = domainEntries[0][1];
+  const topDomains = domainEntries.filter(([,sc])=>sc===topScore).map(([d])=>d);
+  if(topDomains.length>1){
+    return {type:'clarify', options: topDomains.slice(0,4), operation, range};
+  }
+
+  const domain = topDomains[0];
+  askLastDomain = domain; askLastOperation = operation;
+  return buildIntentFromDomainOp(domain, operation, range, norm);
 }
 const ASK_EXAMPLES = [
-  'When did she last poo?',
-  'How much did she sleep yesterday?',
-  'What was her longest sleep this week?',
-  'Which day had the most feeds?',
-  'How has her weight changed since birth?',
-  'Compare this week with last week'
+  'How much sleep today?',
+  'Last poo?',
+  "Her latest weight?",
+  'Compare feeds this week vs last week',
+  'When is her next appointment?'
 ];
 let askQuestion = '', askAnswer = null, askEvidence = null, askEvidenceExpanded = false, askError = null;
 let askHistory = [];
+let askClarify = null; // {options, operation, range}
 function handleAskSubmit(question){
   question = (question||'').trim();
   if(!question) return;
-  askError = null; askAnswer = null; askEvidence = null; askEvidenceExpanded = false;
+  askError = null; askAnswer = null; askEvidence = null; askEvidenceExpanded = false; askClarify = null;
   if(looksLikeMedicalQuestion(question)){
     const r = executeUnanswerable();
     askAnswer=r.answer; askEvidence=r.evidence;
@@ -3769,6 +4022,11 @@ function handleAskSubmit(question){
   }
   try{
     const intentRaw = classifyAskIntentLocal(question);
+    if(intentRaw && intentRaw.type==='clarify'){
+      askClarify = intentRaw;
+      renderMain();
+      return;
+    }
     const intent = (intentRaw && ASK_KNOWN_TYPES.includes(intentRaw.type)) ? intentRaw : {type:'unknown'};
     const r = executeAskIntent(intent);
     askAnswer=r.answer; askEvidence=r.evidence;
@@ -3779,22 +4037,46 @@ function handleAskSubmit(question){
   }
   renderMain();
 }
+function resolveAskClarify(domain){
+  if(!askClarify) return;
+  const {operation, range} = askClarify;
+  askClarify = null;
+  try{
+    const intent = buildIntentFromDomainOp(domain, operation, range, '');
+    askLastDomain = domain; askLastOperation = operation;
+    const r = executeAskIntent(intent);
+    askAnswer=r.answer; askEvidence=r.evidence;
+    askHistory.unshift({q:`(${ASK_DOMAIN_LABELS[domain]||domain})`, a:r.answer});
+  }catch(e){
+    console.error('Ask Keshavi clarify failed', e);
+    askError="Something went wrong answering that — try rephrasing the question.";
+  }
+  renderMain();
+}
 function renderAskView(){
   return `
     <div class="hero">
       <button id="askBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
       <h1>Ask ${escapeHtml(state.profile.name)}</h1><p>Ask a question about her logged history.</p>
     </div>
-    <input type="text" id="askInput" placeholder="e.g. How much did she sleep yesterday?" value="${escapeHtml(askQuestion)}">
+    <input type="text" id="askInput" placeholder="e.g. How much sleep today?" value="${escapeHtml(askQuestion)}">
     <button class="btn" id="askSubmitBtn" style="margin-top:10px;">Ask</button>
 
-    ${!askAnswer && !askError ? `
+    ${!askAnswer && !askError && !askClarify ? `
     <div class="section-header" style="margin-top:20px;">Try asking</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;">
       ${ASK_EXAMPLES.map(q=>`<button class="chip due" data-askexample="${escapeHtml(q)}" style="text-transform:none;cursor:pointer;border:none;">${escapeHtml(q)}</button>`).join('')}
     </div>` : ''}
 
     ${askError ? `<div class="note" style="background:var(--status-critical-bg);color:var(--status-critical-fg);border-radius:var(--radius-control);padding:12px 14px;margin-top:16px;">${escapeHtml(askError)}</div>` : ''}
+
+    ${askClarify ? `
+    <div class="card" style="margin-top:16px;">
+      <div class="support-text" style="margin-top:0;font-size:14px;">What would you like to check?</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+        ${askClarify.options.map(d=>`<button class="chip due" data-askclarify="${d}" style="text-transform:none;cursor:pointer;border:none;">${ASK_DOMAIN_LABELS[d]||d}</button>`).join('')}
+      </div>
+    </div>` : ''}
 
     ${askAnswer ? `
     <div class="card" style="margin-top:16px;">
@@ -3826,6 +4108,9 @@ function bindAskView(){
   }
   document.querySelectorAll('[data-askexample]').forEach(b=>{
     b.addEventListener('click', ()=> handleAskSubmit(b.dataset.askexample));
+  });
+  document.querySelectorAll('[data-askclarify]').forEach(b=>{
+    b.addEventListener('click', ()=> resolveAskClarify(b.dataset.askclarify));
   });
   const evToggle = document.getElementById('askEvidenceToggle');
   if(evToggle) evToggle.addEventListener('click', ()=>{ askEvidenceExpanded=!askEvidenceExpanded; renderMain(); });
@@ -3879,6 +4164,19 @@ function buildBarChartSVG(buckets, dayKeys, todayKey, valueFn, opts){
     const isActive = opts.activeIdx===i;
     if(!b.hasData){
       svg += `<rect x="${x.toFixed(1)}" y="${(H-padB-3).toFixed(1)}" width="${barW.toFixed(1)}" height="3" rx="1.5" fill="${noDataColor}"/>`;
+    } else if(opts.groupedFn){
+      /* Side-by-side sub-bars sharing one baseline and one scale — used when
+         two categories legitimately overlap (e.g. wet vs dirty nappies) and
+         must never be stacked as if they summed to a single total. */
+      const grouped = opts.groupedFn(b);
+      const gGap = 2;
+      const subW = (barW - gGap*(grouped.length-1)) / grouped.length;
+      grouped.forEach((g,gi)=>{
+        const gh = maxV>0 ? Math.max(g.value>0?3:0, (g.value/maxV)*(H-padT-padB)) : 0;
+        const gx = x + gi*(subW+gGap);
+        const gy = H-padB-gh;
+        svg += `<rect x="${gx.toFixed(1)}" y="${gy.toFixed(1)}" width="${subW.toFixed(1)}" height="${gh.toFixed(1)}" rx="3" fill="${g.color}" opacity="${isActive||isToday?1:0.75}"/>`;
+      });
     } else {
       const v = values[i];
       const hgt = Math.max(3, (v/maxV)*(H-padT-padB));
@@ -3893,8 +4191,8 @@ function buildBarChartSVG(buckets, dayKeys, todayKey, valueFn, opts){
       } else {
         svg += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${hgt.toFixed(1)}" rx="4" fill="${barColor}" opacity="${isActive?1:(isToday?0.9:0.6)}"/>`;
       }
-      if(isActive) svg += `<rect x="${(x-1.5).toFixed(1)}" y="${(y-1.5).toFixed(1)}" width="${(barW+3).toFixed(1)}" height="${(H-padB-y+1.5).toFixed(1)}" rx="5" fill="none" stroke="${barColor}" stroke-width="1.5" opacity="0.6"/>`;
     }
+    if(isActive) svg += `<rect x="${(x-1.5).toFixed(1)}" y="${(padT-2).toFixed(1)}" width="${(barW+3).toFixed(1)}" height="${(H-padB-padT+2+1.5).toFixed(1)}" rx="5" fill="none" stroke="${barColor}" stroke-width="1.5" opacity="0.6"/>`;
     svg += `<rect data-idx="${i}" class="week-bar-tap" x="${x.toFixed(1)}" y="0" width="${barW.toFixed(1)}" height="${H-padB}" fill="transparent" style="cursor:pointer;"/>`;
     svg += `<text x="${(x+barW/2).toFixed(1)}" y="${H-6}" font-size="9" fill="${isToday?labelColor:textColor}" text-anchor="middle" font-weight="${isToday?800:600}">${labels[i]}</text>`;
   });
@@ -3983,7 +4281,10 @@ function renderNappyDayDetail(b){
       <div style="font-weight:800;font-size:13px;">${label}${isToday?' · so far':''}</div>
       <div class="rline">${b.changeCount} nappy change${b.changeCount===1?'':'s'}</div>
       <div class="rline">Contained urine: ${b.wetOut} · Contained stool: ${b.dirtyOut}</div>
-      ${b.both ? `<div class="meta-text">${b.both} of these contained both.</div>` : ''}
+      <div class="meta-text" style="margin-top:6px;font-weight:700;">Breakdown</div>
+      <div class="rline">Wet only: ${b.wetOnly}</div>
+      <div class="rline">Both: ${b.both}</div>
+      <div class="rline">Dirty only: ${b.dirtyOnly}</div>
       <button class="ql-link" data-viewday="${b.dayKey}" style="padding:6px 0 0;">View day →</button>
     </div>`;
 }
@@ -3992,10 +4293,15 @@ function renderNappyWeekView(buckets, dayKeys, todayKey){
   const avgDirty = weekAverageExcludingToday(buckets, 'dirtyOut', todayKey);
   const avgChanges = weekAverageExcludingToday(buckets, 'changeCount', todayKey);
   const dark = isDarkMode();
-  const wetColor = dark?'#7FC4E0':'#5FA8D3', dirtyColor = dark?'#D9A15C':'#B8823A', bothColor = dark?'#C3AADD':'#9B82B8';
-  const chart = buildBarChartSVG(buckets, dayKeys, todayKey, b=>b.changeCount, {
+  const wetColor = dark?'#7FC4E0':'#5FA8D3', dirtyColor = dark?'#D9A15C':'#B8823A';
+  /* Wet and Dirty overlap (a "both" nappy counts toward each), so they are
+     compared as two same-scale side-by-side bars, never stacked as parts of
+     one total — stacking would visually imply wet+dirty=all changes, which
+     is false whenever any nappy contained both. "Both" belongs in the day
+     detail breakdown below, not the primary comparison. */
+  const chart = buildBarChartSVG(buckets, dayKeys, todayKey, b=>Math.max(b.wetOut,b.dirtyOut), {
     activeIdx: weekActiveIdx,
-    segmentsFn: b=> [ {value:b.wetOnly, color:wetColor}, {value:b.both, color:bothColor}, {value:b.dirtyOnly, color:dirtyColor} ]
+    groupedFn: b=> [ {value:b.wetOut, color:wetColor}, {value:b.dirtyOut, color:dirtyColor} ]
   });
   const active = weekActiveIdx!=null ? buckets[weekActiveIdx] : null;
   const cmp = weekOffset===0 ? compareToPreviousWeek('nappy') : null;
@@ -4003,7 +4309,6 @@ function renderNappyWeekView(buckets, dayKeys, todayKey){
   return `
     <div class="legend" style="margin-top:14px;">
       <span><i style="background:${wetColor}"></i>Wet</span>
-      <span><i style="background:${bothColor}"></i>Both</span>
       <span><i style="background:${dirtyColor}"></i>Dirty</span>
     </div>
     <div id="weekChartWrap">${chart}</div>
@@ -4156,15 +4461,14 @@ function computeDailyBrief(){
   const cutoff = Date.now()-24*3600000;
   const sleepMin24 = effectiveSleepRecords().reduce((s,x)=> s+sleepMinutesInRange(x, cutoff, Date.now()), 0);
   const feeds24 = state.feeds.map(normalizeFeed).filter(f=> new Date(f.date).getTime()>=cutoff);
-  const nappies24 = state.nappies.filter(n=> new Date(n.date).getTime()>=cutoff);
-  let wet24=0, dirty24=0; nappies24.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet24++; if(n.type==='poo'||n.type==='both') dirty24++; });
+  const nappyStats24 = getNappyStatsForPeriod(cutoff, Date.now());
   const lastWetNappy = state.nappies.filter(n=>n.type==='wet'||n.type==='both').sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
   const lastTemp = state.temperatures.slice().sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
   const recentVaccine = state.vaccines.filter(v=>v.givenDate && new Date(v.givenDate).getTime()>=cutoff)[0];
   const recentAppt = state.appointments.filter(a=> a.status==='completed' && new Date(a.date).getTime()>=cutoff)[0];
   const recentMoment = state.milestones.filter(m=> new Date(m.date).getTime()>=cutoff)[0];
   const recentMeasurement = state.measurements.filter(m=> new Date(m.date).getTime()>=cutoff).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
-  return { sleepMin24, feedCount24: feeds24.length, wet24, dirty24, lastWetNappy, lastTemp, recentVaccine, recentAppt, recentMoment, recentMeasurement };
+  return { sleepMin24, feedCount24: feeds24.length, wet24: nappyStats24.wet, dirty24: nappyStats24.dirty, lastWetNappy, lastTemp, recentVaccine, recentAppt, recentMoment, recentMeasurement };
 }
 function renderDailyBrief(){
   const b = computeDailyBrief();
@@ -4638,8 +4942,11 @@ function renderVaccineRow(v){
         actions.push(`<button data-vaction="given" data-id="${v.id}">Mark given</button>`);
         actions.push(`<button data-vaction="na" data-id="${v.id}">Not applicable</button>`);
       }
+      if(status==='given'){
+        actions.push(`<button data-vaction="edit" data-id="${v.id}">Edit vaccination</button>`);
+        actions.push(`<button data-vaction="undo-given" data-id="${v.id}">Undo given</button>`);
+      }
       if(v.notApplicable) actions.push(`<button data-vaction="undo-na" data-id="${v.id}">Undo not applicable</button>`);
-      if(status==='given') actions.push(`<button data-vaction="undo-given" data-id="${v.id}">Undo given</button>`);
       actions.push(`<button data-vaction="hide" data-id="${v.id}">Hide</button>`);
     }
     actions.push(`<button data-vaction="delete" data-id="${v.id}" class="danger">Delete</button>`);
@@ -4649,11 +4956,30 @@ function renderVaccineRow(v){
   if(markingGivenId===v.id){
     givenForm = `
       <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
-        <label>Date given</label><input type="date" id="gvDate-${v.id}" value="${todayDateInput()}">
+        <div style="font-weight:800;font-size:13px;margin-bottom:2px;">${escapeHtml(v.name)}${v.dose?' — '+escapeHtml(v.dose):''}</div>
+        <label>Given on</label><input type="date" id="gvDate-${v.id}" value="${todayDateInput()}">
         <label>Provider (optional)</label><input type="text" id="gvProvider-${v.id}" placeholder="e.g. Dr Vasu">
         <label>Batch / lot (optional)</label><input type="text" id="gvBatch-${v.id}" placeholder="optional">
         <label>Reaction (optional)</label><input type="text" id="gvReaction-${v.id}" placeholder="optional">
-        <button class="btn secondary" style="margin-top:10px;" data-confirmgiven="${v.id}">Confirm given</button>
+        <label>Note (optional)</label><input type="text" id="gvNote-${v.id}" placeholder="optional">
+        <button class="btn secondary" style="margin-top:10px;" data-confirmgiven="${v.id}">Mark as given</button>
+      </div>`;
+  }
+  let editForm = '';
+  if(editingVaccineId===v.id){
+    const dateVal = v.givenDate ? v.givenDate.slice(0,10) : todayDateInput();
+    editForm = `
+      <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
+        <div style="font-weight:800;font-size:13px;margin-bottom:2px;">Edit ${escapeHtml(v.name)}${v.dose?' — '+escapeHtml(v.dose):''}</div>
+        <label>Date given</label><input type="date" id="evDate-${v.id}" value="${dateVal}" max="${todayDateInput()}">
+        <label>Provider (optional)</label><input type="text" id="evProvider-${v.id}" value="${escapeHtml(v.provider||'')}" placeholder="e.g. Dr Vasu">
+        <label>Batch / lot (optional)</label><input type="text" id="evBatch-${v.id}" value="${escapeHtml(v.batch||'')}" placeholder="optional">
+        <label>Reaction (optional)</label><input type="text" id="evReaction-${v.id}" value="${escapeHtml(v.reaction||'')}" placeholder="optional">
+        <label>Note (optional)</label><input type="text" id="evNote-${v.id}" value="${escapeHtml(v.note||'')}" placeholder="optional">
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn secondary" style="flex:1;" data-savevaccineedit="${v.id}">Save changes</button>
+          <button class="btn ghost" style="flex:1;" data-cancelvaccineedit="${v.id}">Cancel</button>
+        </div>
       </div>`;
   }
   return `
@@ -4664,7 +4990,7 @@ function renderVaccineRow(v){
         <button class="menu-btn" data-togglevaccine="${v.id}">•••</button>
       </div>
     </div>
-    ${panel}${givenForm}
+    ${panel}${givenForm}${editForm}
   `;
 }
 function healthCatIcon(cat){ return {symptom:'🤒', medication:'💊', advice:'🩺', note:'📝', other:'📋'}[cat] || '📋'; }
@@ -4709,7 +5035,8 @@ function compileHealthSummary(start, end){
   const pumpingMl = feedsInRange.filter(f=>f.type==='pumping').reduce((s,f)=>s+(f.pumpTotalMl||0),0);
   const totalSleepMin = sleepsOverlapping.reduce((s,x)=> s+sleepMinutesInRange(x, start.getTime(), end.getTime()), 0);
   const longestSleep = sleepsOverlapping.reduce((mx,x)=>Math.max(mx,x.mins||0),0);
-  let wetCount=0, dirtyCount=0; nappiesInRange.forEach(n=>{ if(n.type==='wet'||n.type==='both') wetCount++; if(n.type==='poo'||n.type==='both') dirtyCount++; });
+  const nappyStatsRange = computeNappyStats(nappiesInRange);
+  const wetCount = nappyStatsRange.wet, dirtyCount = nappyStatsRange.dirty;
 
   return { p, corrected, birthWeight, latestWeight, measurementsInRange, feedsInRange, feedsPerDay: feedsInRange.length/days,
     totalNursingMin, formulaMl, expressedMl, pumpingMl, totalSleepMin, sleepPeriods: sleepsOverlapping.length, longestSleep,
@@ -5163,7 +5490,7 @@ function bindHealth(){
   });
 
   document.querySelectorAll('[data-togglevaccine]').forEach(b=>{
-    b.addEventListener('click', ()=>{ const id=b.dataset.togglevaccine; expandedVaccineId = expandedVaccineId===id?null:id; markingGivenId=null; renderMain(); });
+    b.addEventListener('click', ()=>{ const id=b.dataset.togglevaccine; expandedVaccineId = expandedVaccineId===id?null:id; markingGivenId=null; editingVaccineId=null; renderMain(); });
   });
   document.querySelectorAll('[data-vaction]').forEach(b=>{
     b.addEventListener('click', async ()=>{
@@ -5171,13 +5498,35 @@ function bindHealth(){
       const v = state.vaccines.find(x=>x.id===id);
       if(!v) return;
       if(action==='given'){ markingGivenId=id; expandedVaccineId=null; renderMain(); return; }
+      if(action==='edit'){ editingVaccineId=id; expandedVaccineId=null; renderMain(); return; }
       if(action==='na'){ v.notApplicable=true; await saveKey('vaccines', state.vaccines); toast('Marked not applicable'); expandedVaccineId=null; renderMain(); return; }
       if(action==='undo-na'){ v.notApplicable=false; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
-      if(action==='undo-given'){ v.givenDate=null; v.provider=''; v.batch=''; v.reaction=''; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
+      if(action==='undo-given'){ v.givenDate=null; v.provider=''; v.batch=''; v.reaction=''; v.note=''; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
       if(action==='hide'){ v.hidden=true; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
       if(action==='unhide'){ v.hidden=false; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
       if(action==='delete'){ state.vaccines = state.vaccines.filter(x=>x.id!==id); await saveKey('vaccines', state.vaccines); toast('Deleted'); expandedVaccineId=null; renderMain(); return; }
     });
+  });
+  document.querySelectorAll('[data-savevaccineedit]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id = b.dataset.savevaccineedit;
+      const v = state.vaccines.find(x=>x.id===id);
+      if(!v) return;
+      const dateVal = document.getElementById(`evDate-${id}`).value;
+      if(!dateVal){ toast('Please choose a date'); return; }
+      /* Editing corrects the record in place — status stays Given, no new
+         event is created. This is deliberately distinct from Undo given. */
+      v.givenDate = new Date(dateVal+'T12:00:00').toISOString();
+      v.provider = document.getElementById(`evProvider-${id}`).value.trim();
+      v.batch = document.getElementById(`evBatch-${id}`).value.trim();
+      v.reaction = document.getElementById(`evReaction-${id}`).value.trim();
+      v.note = document.getElementById(`evNote-${id}`).value.trim();
+      await saveKey('vaccines', state.vaccines);
+      toast('Vaccination updated ✓'); editingVaccineId=null; renderMain();
+    });
+  });
+  document.querySelectorAll('[data-cancelvaccineedit]').forEach(b=>{
+    b.addEventListener('click', ()=>{ editingVaccineId=null; renderMain(); });
   });
   document.querySelectorAll('[data-confirmgiven]').forEach(b=>{
     b.addEventListener('click', async ()=>{
@@ -5185,10 +5534,11 @@ function bindHealth(){
       const v = state.vaccines.find(x=>x.id===id);
       if(!v) return;
       const dateVal = document.getElementById(`gvDate-${id}`).value;
-      v.givenDate = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+      v.givenDate = dateVal ? new Date(dateVal+'T12:00:00').toISOString() : new Date().toISOString();
       v.provider = document.getElementById(`gvProvider-${id}`).value.trim();
       v.batch = document.getElementById(`gvBatch-${id}`).value.trim();
       v.reaction = document.getElementById(`gvReaction-${id}`).value.trim();
+      v.note = document.getElementById(`gvNote-${id}`).value.trim();
       await saveKey('vaccines', state.vaccines);
       toast('Marked as given ✓'); markingGivenId=null; renderMain();
     });
