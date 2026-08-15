@@ -1,0 +1,3520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Growth Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+  :root{
+    /* Brand accents (used selectively, not as a wall-to-wall wash) */
+    --lavender:#B79FD1;
+    --lavender-deep:#8E6FB0;
+    --blush:#F4B8C1;
+    --butter:#F6D186;
+    --mint:#8FCDBB;
+    --mint-deep:#4F9E8B;
+    --coral:#EC9384;
+    --coral-deep:#D96F5D;
+
+    /* Calm neutral canvas + surfaces */
+    --canvas:#FAF9FB;
+    --sky:#FAF9FB;
+    --sky2:#FAF9FB;
+    --card:#FFFFFF;
+    --surface-muted:#F5F3F7;
+    --line:#EBE7EE;
+
+    /* Text hierarchy */
+    --ink:#332C3A;
+    --ink-soft:#847C8D;
+    --ink-tertiary:#AFA8B7;
+
+    /* Status system: icon + label + colour, never colour alone */
+    --status-neutral-bg:#F1EFF4;
+    --status-neutral-fg:#847C8D;
+    --status-positive-bg:rgba(143,205,187,.28);
+    --status-positive-fg:#3F8874;
+    --status-attention-bg:rgba(246,209,134,.35);
+    --status-attention-fg:#8A6A24;
+    --status-critical-bg:rgba(236,147,132,.28);
+    --status-critical-fg:#C15D4B;
+
+    /* Radius tiers */
+    --radius-major:22px;
+    --radius-standard:18px;
+    --radius-control:14px;
+    --radius-small:12px;
+    --radius-pill:999px;
+
+    /* Elevation */
+    --shadow-1: 0 1px 2px rgba(51,44,58,0.05);
+    --shadow-2: 0 4px 14px rgba(51,44,58,0.08), 0 1px 3px rgba(51,44,58,0.05);
+    --shadow-3: 0 -8px 30px rgba(51,44,58,0.18);
+    --shadow: var(--shadow-2);
+
+    /* Spacing scale */
+    --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px;
+    --space-5:20px; --space-6:24px; --space-7:32px; --space-8:40px;
+
+    /* Motion */
+    --motion-fast:150ms;
+    --motion-base:200ms;
+    --motion-slow:250ms;
+    --ease: cubic-bezier(.4,0,.2,1);
+  }
+  /* Dark mode — dark charcoal, not pure black; muted lavender; restrained contrast.
+     Built for nighttime feeds, not just an inverted palette. */
+  [data-theme="dark"]{
+    --canvas:#1E1A22;
+    --sky:#1E1A22;
+    --sky2:#1E1A22;
+    --card:#28232D;
+    --surface-muted:#332C3A;
+    --line:#3D3544;
+    --ink:#EDE8F0;
+    --ink-soft:#B0A6BC;
+    --ink-tertiary:#83788F;
+    --lavender:#9B82B8;
+    --lavender-deep:#C3AADD;
+    --status-neutral-bg:#332C3A;
+    --status-neutral-fg:#B0A6BC;
+    --status-positive-bg:rgba(143,205,187,.16);
+    --status-positive-fg:#82C7B1;
+    --status-attention-bg:rgba(246,209,134,.16);
+    --status-attention-fg:#E0BB6E;
+    --status-critical-bg:rgba(236,147,132,.18);
+    --status-critical-fg:#E39184;
+    --shadow-1: 0 1px 2px rgba(0,0,0,0.35);
+    --shadow-2: 0 4px 14px rgba(0,0,0,0.4), 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-3: 0 -8px 30px rgba(0,0,0,0.5);
+    --shadow: var(--shadow-2);
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:0.001ms !important; transition-duration:0.001ms !important; }
+  }
+  @keyframes ptFadeIn{ from{ opacity:0; } to{ opacity:1; } }
+  .pt-new{ animation: ptFadeIn var(--motion-slow) var(--ease); }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:linear-gradient(180deg, var(--sky) 0%, var(--sky2) 100%);
+    color:var(--ink);
+    font-family:'Nunito',sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overscroll-behavior-y:none;
+    transition:background-color var(--motion-base) var(--ease), color var(--motion-base) var(--ease);
+  }
+  body, .card, .surface-muted, .stat, header.top, nav.bottom, .sheet, input, select, textarea{
+    transition:background-color var(--motion-base) var(--ease), border-color var(--motion-base) var(--ease), color var(--motion-base) var(--ease);
+  }
+  #app{
+    max-width:480px;
+    margin:0 auto;
+    position:relative;
+  }
+  header.top{
+    position:fixed; top:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:480px; box-sizing:border-box;
+    padding:calc(16px + env(safe-area-inset-top)) 20px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    background:var(--canvas);
+    z-index:20;
+  }
+  header.top .brand{
+    font-family:'Baloo 2',cursive;
+    font-weight:700;
+    font-size:18px;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+  header.top .age{
+    font-family:'IBM Plex Mono',monospace;
+    font-variant-numeric: tabular-nums;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    background:var(--surface-muted);
+    padding:5px 10px;
+    border-radius:var(--radius-pill);
+  }
+  main{
+    padding:calc(74px + env(safe-area-inset-top)) 18px calc(114px + env(safe-area-inset-bottom));
+  }
+  .hero{ margin:8px 0 16px; }
+  .hero h1{
+    font-family:'Baloo 2',cursive;
+    font-size:26px;
+    font-weight:700;
+    margin:0 0 3px;
+    line-height:1.15;
+    color:var(--ink);
+  }
+  .hero p{ margin:0; color:var(--ink-soft); font-size:13.5px; }
+  .card{
+    background:var(--card);
+    border-radius:var(--radius-major);
+    padding:18px 18px 20px;
+    margin-bottom:14px;
+    box-shadow:var(--shadow-2);
+  }
+  .card h2{
+    font-family:'Nunito',sans-serif;
+    font-size:15.5px;
+    font-weight:800;
+    margin:0 0 12px;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    gap:7px;
+  }
+  .section-header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin:22px 2px 8px; font-family:'Nunito',sans-serif; font-size:13.5px; font-weight:800; color:var(--ink);
+  }
+  .section-header:first-child{ margin-top:2px; }
+  .section-header .link{ font-size:12px; font-weight:700; color:var(--lavender-deep); cursor:pointer; }
+  .surface-group{
+    background:var(--surface-muted); border-radius:var(--radius-standard); padding:4px 14px; margin-bottom:14px;
+  }
+  .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .stat{
+    background:var(--surface-muted);
+    border-radius:var(--radius-control);
+    padding:12px 8px;
+    text-align:center;
+  }
+  .stat .val{ font-family:'IBM Plex Mono',monospace; font-variant-numeric: tabular-nums; font-size:18px; font-weight:500; color:var(--ink); display:block; }
+  .stat .lbl{ font-size:10.5px; color:var(--ink-soft); font-weight:600; display:block; margin-top:3px; }
+  .stat .pct{ font-size:9.5px; color:var(--ink-soft); display:block; margin-top:3px; }
+  .empty{
+    color:var(--ink-soft); font-size:13px; text-align:center; padding:20px 10px;
+    background:var(--surface-muted); border-radius:var(--radius-control);
+  }
+  .row-item{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:11px 2px; border-bottom:1px solid var(--line); font-size:13.5px;
+  }
+  .row-item:last-child{ border-bottom:none; }
+  .row-item .main{ font-weight:700; }
+  .row-item .sub{ color:var(--ink-soft); font-size:11.5px; }
+  .row-item button.del{ background:none; border:none; color:var(--ink-tertiary); font-size:12px; cursor:pointer; padding:4px 6px; font-weight:700; }
+  label{
+    display:block; font-size:13px; font-weight:700;
+    color:var(--ink); margin:14px 0 6px;
+  }
+  label:first-child{ margin-top:0; }
+  input,select,textarea{
+    width:100%; padding:12px 14px; border:1.5px solid var(--line); border-radius:var(--radius-control);
+    background:var(--surface-muted); font-family:'Nunito',sans-serif; font-size:15px; color:var(--ink);
+  }
+  input:focus,select:focus,textarea:focus{ outline:none; border-color:var(--lavender); }
+  .seg{ display:flex; gap:8px; }
+  .seg button{
+    flex:1; padding:11px 6px; border:2px solid var(--line); border-radius:14px;
+    background:var(--sky); font-family:'Nunito',sans-serif; font-weight:700; font-size:13px;
+    color:var(--ink-soft); cursor:pointer;
+  }
+  .seg button.active{ background:var(--lavender); border-color:var(--lavender); color:#fff; }
+  [data-theme="dark"] .seg button.active{ background:var(--lavender-deep); border-color:var(--lavender-deep); color:#1E1A22; }
+  .btn{
+    width:100%; padding:14px; border-radius:16px; border:none;
+    background:var(--lavender-deep); color:#fff; font-family:'Baloo 2',cursive; font-size:16px;
+    font-weight:600; cursor:pointer; margin-top:18px; box-shadow:0 4px 14px rgba(142,111,176,.35);
+  }
+  .btn:active{ transform:scale(0.98); }
+  .btn.secondary{ background:var(--mint-deep); box-shadow:0 4px 14px rgba(79,158,139,.3); }
+  .btn.ghost{ background:transparent; color:var(--lavender-deep); border:2px dashed var(--lavender); box-shadow:none; }
+  nav.bottom{
+    position:fixed; bottom:0; left:50%; transform:translateX(-50%);
+    width:100%; max-width:480px; box-sizing:border-box;
+    display:flex; background:var(--card);
+    border-radius:var(--radius-standard) var(--radius-standard) 0 0; box-shadow:var(--shadow-3);
+    padding:6px 4px calc(4px + env(safe-area-inset-bottom)); z-index:20;
+  }
+  nav.bottom button{
+    flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center;
+    gap:2px; padding:6px 1px 4px; color:var(--ink-tertiary); cursor:pointer; font-family:'Nunito',sans-serif;
+    font-weight:600; font-size:9.5px; transition:color var(--motion-fast) var(--ease);
+    min-height:44px;
+  }
+  nav.bottom button svg{ width:19px; height:19px; opacity:.75; transition:opacity var(--motion-fast) var(--ease); }
+  nav.bottom button.active{ color:var(--lavender-deep); font-weight:800; }
+  nav.bottom button.active svg{ stroke:var(--lavender-deep); opacity:1; }
+  .fab{
+    position:fixed; right:max(16px, calc(50% - 224px)); bottom:calc(78px + env(safe-area-inset-bottom));
+    height:48px; padding:0 18px 0 14px; border-radius:var(--radius-pill);
+    background:var(--lavender-deep); color:#fff;
+    border:none; box-shadow:0 4px 14px rgba(0,0,0,.28); cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    font-family:'Nunito',sans-serif; font-weight:800; font-size:14px;
+    transition:transform var(--motion-fast) var(--ease);
+    z-index:25;
+  }
+  [data-theme="dark"] .fab{ color:#1E1A22; }
+  [data-theme="dark"] .fab svg{ stroke:#1E1A22; }
+  .fab:active{ transform:scale(0.95); }
+  .fab svg{ width:20px; height:20px; stroke:#fff; stroke-width:2.3; }
+  /* Segmented control (Weight | Length | Head) */
+  .segctl{
+    display:flex; background:var(--surface-muted); border-radius:var(--radius-control);
+    padding:3px; margin-bottom:14px; position:relative;
+  }
+  .segctl button{
+    flex:1; position:relative; z-index:1; padding:9px 6px; border:none; border-radius:11px;
+    background:transparent; font-family:'Nunito',sans-serif; font-weight:700; font-size:13px;
+    color:var(--ink-soft); cursor:pointer;
+    transition:color var(--motion-base) var(--ease), background-color var(--motion-base) var(--ease), font-weight var(--motion-fast) var(--ease);
+    min-height:38px;
+  }
+  .segctl button.active{ background:var(--card); color:var(--ink); font-weight:800; box-shadow:var(--shadow-1); }
+  [data-theme="dark"] .segctl button.active{ background:var(--lavender-deep); color:#1E1A22; }
+  /* Growth chart tooltip card */
+  .chart-tooltip{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius-control);
+    padding:12px 14px; margin-top:8px; box-shadow:var(--shadow-1);
+    animation:ptFadeIn var(--motion-base) var(--ease);
+  }
+  /* Clean stat row with divider */
+  .stat-row{ display:flex; align-items:center; margin-top:14px; }
+  .stat-cell{ flex:1; text-align:center; }
+  .stat-val{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; font-size:17px; font-weight:600; color:var(--ink); }
+  .stat-lbl{ font-size:11px; font-weight:600; color:var(--ink-soft); margin-top:2px; }
+  .stat-div{ width:1px; height:32px; background:var(--line); }
+  /* Mobile disclosure row */
+  .disclosure-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:13px 2px; margin-top:8px; border-top:1px solid var(--line); border-bottom:1px solid var(--line);
+    font-size:13.5px; font-weight:700; color:var(--ink); cursor:pointer; user-select:none;
+  }
+  .disclosure-row:active{ background:var(--surface-muted); }
+  .tabs{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .tabs button{
+    padding:8px 14px; border-radius:var(--radius-pill); border:1.5px solid var(--line); background:var(--card);
+    font-size:12.5px; font-weight:700; color:var(--ink-soft); cursor:pointer;
+  }
+  .tabs button.active{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  [data-theme="dark"] .tabs button.active{ background:var(--lavender-deep); color:#1E1A22; border-color:var(--lavender-deep); }
+  .legend{ display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; font-size:10.5px; color:var(--ink-soft); }
+  .legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .legend i{ width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .onboard{ display:flex; flex-direction:column; justify-content:center; min-height:100vh; padding:32px 26px; }
+  .onboard .mark{ font-size:34px; margin-bottom:6px; }
+  .onboard h1{ font-family:'Baloo 2',cursive; font-size:30px; font-weight:700; line-height:1.15; margin:0 0 8px; color:var(--ink); }
+  .onboard p.sub{ color:var(--ink-soft); font-size:14px; margin:0 0 26px; }
+  .toast{
+    position:fixed; bottom:96px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:var(--radius-pill); font-size:13px;
+    font-weight:700; opacity:0; transition:opacity var(--motion-base) var(--ease), transform var(--motion-base) var(--ease); pointer-events:none;
+    max-width:90%; text-align:center; z-index:60;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .fieldrow{ display:flex; gap:10px; }
+  .fieldrow > div{ flex:1; }
+  .note{ font-size:11px; color:var(--ink-soft); margin-top:8px; line-height:1.55; }
+  .badge{
+    display:inline-block; padding:3px 10px; border-radius:var(--radius-pill); font-size:11.5px; font-weight:800;
+  }
+  .badge.good{ background:var(--status-positive-bg); color:var(--status-positive-fg); }
+  .badge.watch{ background:var(--status-attention-bg); color:var(--status-attention-fg); }
+  .badge.flag{ background:var(--status-critical-bg); color:var(--status-critical-fg); }
+  .badge.neutral{ background:var(--status-neutral-bg); color:var(--ink-soft); }
+  .narrative{
+    background:var(--surface-muted); border-radius:var(--radius-control); padding:14px 16px; margin-top:12px; font-size:13.5px; line-height:1.55;
+  }
+  .narrative .head{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .chip{
+    display:inline-flex; align-items:center; gap:4px; padding:4px 10px; border-radius:var(--radius-pill); font-size:10.5px; font-weight:800;
+  }
+  .chip.due{ background:var(--status-attention-bg); color:var(--status-attention-fg); }
+  .chip.given{ background:var(--status-positive-bg); color:var(--status-positive-fg); }
+  .chip.overdue{ background:var(--status-critical-bg); color:var(--status-critical-fg); }
+  .divider-cute{ text-align:center; color:var(--lavender); font-size:12px; letter-spacing:.3em; margin:6px 0 14px; }
+  .quickrow{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .quickbtn{
+    background:var(--surface-muted); border:1.5px solid var(--line); border-radius:var(--radius-control); padding:14px 4px;
+    font-family:'Nunito',sans-serif; font-weight:800; font-size:11.5px; color:var(--ink);
+    text-align:center; cursor:pointer; line-height:1.6;
+  }
+  .quickbtn:active{ background:var(--lavender); border-color:var(--lavender); color:#fff; }
+  .quickbtn .ico{ font-size:20px; display:block; }
+  .today-row{ display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--line); gap:10px; }
+  .today-row:last-child{ border-bottom:none; }
+  .today-row .lbl2{ font-weight:700; font-size:12.5px; white-space:nowrap; color:var(--ink-soft); }
+  .today-row .val2{ color:var(--ink); font-weight:600; font-size:12.5px; text-align:right; }
+
+  /* ---- Quick Log bottom sheet ---- */
+  .sheet-overlay{
+    position:fixed; inset:0; background:rgba(30,22,36,0.4); z-index:70;
+    display:flex; align-items:flex-end; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity var(--motion-base) var(--ease);
+  }
+  .sheet-overlay.open{ opacity:1; pointer-events:auto; }
+  .sheet{
+    background:var(--card); width:100%; max-width:480px; border-radius:24px 24px 0 0;
+    padding:10px 20px calc(22px + env(safe-area-inset-bottom));
+    box-shadow:var(--shadow-3); transform:translateY(100%);
+    transition:transform var(--motion-base) var(--ease);
+    max-height:85vh; overflow-y:auto;
+  }
+  .sheet-overlay.open .sheet{ transform:translateY(0); }
+  .sheet-handle{ width:36px; height:4px; background:var(--line); border-radius:4px; margin:6px auto 16px; }
+  .sheet-title{ font-family:'Baloo 2',cursive; font-size:20px; font-weight:700; color:var(--ink); margin-bottom:14px; display:flex; align-items:center; gap:10px; }
+  .sheet-title button.back{ background:none; border:none; color:var(--ink-soft); cursor:pointer; padding:2px; display:flex; }
+  .ql-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:2px; margin-bottom:6px; }
+  .ql-item{
+    display:flex; flex-direction:column; align-items:center; gap:7px; background:none; border:none;
+    padding:14px 2px; border-radius:var(--radius-control); color:var(--ink); font-family:'Nunito',sans-serif;
+    font-weight:700; font-size:11px; cursor:pointer;
+  }
+  .ql-item:active{ background:var(--surface-muted); }
+  .ql-item svg{ stroke:var(--lavender-deep); width:22px; height:22px; }
+  .ql-more{ width:100%; text-align:center; background:none; border:none; color:var(--ink-soft); font-weight:700; font-size:12.5px; padding:12px; cursor:pointer; }
+  .ql-choice-row{ display:flex; gap:10px; margin:6px 0 4px; }
+  .ql-choice{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:8px;
+    background:var(--surface-muted); border:1.5px solid var(--line); border-radius:var(--radius-standard);
+    padding:20px 6px; cursor:pointer; font-family:'Nunito',sans-serif; font-weight:800; font-size:13px; color:var(--ink);
+  }
+  .ql-choice:active{ background:var(--lavender); border-color:var(--lavender); color:#fff; }
+  .ql-choice svg{ stroke:var(--lavender-deep); width:24px; height:24px; }
+  .ql-choice:active svg{ stroke:#fff; }
+  .ql-nowrow{ display:flex; align-items:center; justify-content:space-between; background:var(--surface-muted); border-radius:var(--radius-control); padding:11px 14px; margin:12px 0; font-size:13.5px; font-weight:700; }
+  .ql-nowrow button{ background:none; border:none; color:var(--lavender-deep); font-weight:800; font-size:12.5px; cursor:pointer; padding:0; }
+  .ql-link{ background:none; border:none; color:var(--ink-soft); font-weight:700; font-size:12.5px; cursor:pointer; padding:8px 0; text-decoration:underline; }
+  .hero-metric{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; font-size:38px; font-weight:500; color:var(--ink); line-height:1; }
+  .secondary-metric{ font-size:14px; font-weight:700; color:var(--lavender-deep); margin-top:4px; }
+  .support-text{ font-size:12.5px; color:var(--ink-soft); margin-top:8px; line-height:1.6; }
+  .meta-text{ font-size:11px; color:var(--ink-tertiary); margin-top:2px; }
+  .tl-day{ margin:20px 2px 6px; font-size:12.5px; font-weight:800; color:var(--ink-soft); }
+  .tl-group{ margin-bottom:4px; }
+  .tl-row{ display:flex; gap:12px; padding:0 2px; cursor:pointer; }
+  .tl-row .tl-dot-col{ display:flex; flex-direction:column; align-items:center; width:12px; }
+  .tl-row .tl-dot{ width:8px; height:8px; border-radius:50%; background:var(--lavender-deep); margin-top:6px; flex-shrink:0; }
+  .tl-row .tl-line{ flex:1; width:1.5px; background:var(--line); margin-top:2px; min-height:14px; }
+  .tl-group > .tl-row:last-child .tl-line{ display:none; }
+  .tl-content{ flex:1; padding-bottom:14px; }
+  .tl-time{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; font-size:11px; color:var(--ink-tertiary); }
+  .tl-line-text{ font-size:13.5px; font-weight:600; color:var(--ink); margin-top:2px; }
+  .menu-btn{ background:none; border:none; color:var(--ink-soft); font-size:18px; cursor:pointer; padding:4px 8px; font-weight:900; line-height:1; }
+  .menu-panel{ background:var(--sky); border-radius:12px; padding:10px; margin:4px 0 12px; display:flex; flex-wrap:wrap; gap:6px; }
+  .menu-panel button{ border:2px solid var(--line); background:var(--card); border-radius:20px; padding:7px 13px; font-size:11.5px; font-weight:700; color:var(--ink); cursor:pointer; font-family:'Nunito',sans-serif; }
+  .menu-panel button.danger{ color:var(--coral-deep); border-color:var(--coral); }
+  .status-chip{ display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:800; white-space:nowrap; }
+  .status-chip.upcoming{ background:var(--sky); color:var(--ink-soft); border:1px solid var(--line); }
+  .status-chip.due{ background:rgba(246,209,134,.4); color:#96742A; }
+  .status-chip.given{ background:rgba(143,205,187,.35); color:var(--mint-deep); }
+  .status-chip.na{ background:var(--sky); color:var(--ink-soft); }
+  .urgent-banner{ background:rgba(236,147,132,.22); border:2px solid var(--coral); border-radius:16px; padding:14px 16px; margin-bottom:14px; font-size:13.5px; line-height:1.6; }
+  .urgent-banner .head{ font-weight:900; color:var(--coral-deep); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+  .qlist label.check{ display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; text-transform:none; color:var(--ink); margin:8px 0; cursor:pointer; }
+  .qlist input[type=checkbox]{ width:auto; }
+  .gallery-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px; }
+  .gallery-card{ background:var(--sky); border-radius:14px; overflow:hidden; position:relative; }
+  .gallery-card img{ width:100%; height:120px; object-fit:cover; display:block; }
+  .gallery-card .ph{ width:100%; height:120px; display:flex; align-items:center; justify-content:center; font-size:34px; }
+  .gallery-card .cap{ padding:8px 10px; }
+  .gallery-card .cap .t{ font-weight:800; font-size:12px; }
+  .gallery-card .cap .s{ font-size:10px; color:var(--ink-soft); margin-top:2px; }
+  .del-x{ position:absolute; top:6px; right:6px; background:rgba(0,0,0,0.45); color:#fff; border:none; border-radius:50%; width:22px; height:22px; font-size:12px; cursor:pointer; line-height:22px; text-align:center; padding:0; }
+  .insight-item{ padding:9px 0; border-bottom:1px dashed var(--line); font-size:12.5px; line-height:1.55; }
+  .insight-item:last-child{ border-bottom:none; }
+  .report h3{ font-family:'Baloo 2',cursive; font-size:15px; margin:16px 0 6px; color:var(--lavender-deep); }
+  .report h3:first-of-type{ margin-top:6px; }
+  .rline{ font-size:12.5px; line-height:1.75; color:var(--ink); }
+  .toast button.undo{ margin-left:8px; background:none; border:none; color:var(--butter); font-weight:900; text-decoration:underline; cursor:pointer; font-size:13px; padding:0; }
+  @media print{
+    nav.bottom, header.top, .no-print { display:none !important; }
+    body{ background:#fff; }
+    #app{ max-width:100%; }
+    main{ padding:0 6px 20px; }
+    .card{ box-shadow:none; border:1px solid #ddd; break-inside:avoid; }
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+/* ---------------- WHO Growth Standards: Girls, 0-24 months ---------------- *
+ * columns per month: [3rd, 15th, 50th, 85th, 97th]                          *
+ * Source: WHO Child Growth Standards (2006), transcribed official tables    */
+const WHO_GIRLS = {
+  weight_kg: [
+    [2.4,2.8,3.2,3.7,4.2],[3.2,3.6,4.2,4.8,5.4],[4.0,4.5,5.1,5.9,6.5],[4.6,5.1,5.8,6.7,7.4],
+    [5.1,5.6,6.4,7.3,8.1],[5.5,6.1,6.9,7.8,8.7],[5.8,6.4,7.3,8.3,9.2],[6.1,6.7,7.6,8.7,9.6],
+    [6.3,7.0,7.9,9.0,10.0],[6.6,7.3,8.2,9.3,10.4],[6.8,7.5,8.5,9.6,10.7],[7.0,7.7,8.7,9.9,11.0],
+    [7.1,7.9,8.9,10.2,11.3],[7.3,8.1,9.2,10.4,11.6],[7.5,8.3,9.4,10.7,11.9],[7.7,8.5,9.6,10.9,12.2],
+    [7.8,8.7,9.8,11.2,12.5],[8.0,8.8,10.0,11.4,12.7],[8.2,9.0,10.2,11.6,13.0],[8.3,9.2,10.4,11.9,13.3],
+    [8.5,9.4,10.6,12.1,13.5],[8.7,9.6,10.9,12.4,13.8],[8.8,9.8,11.1,12.6,14.1],[9.0,9.9,11.3,12.8,14.3],
+    [9.2,10.1,11.5,13.1,14.6]
+  ],
+  length_cm: [
+    [45.6,47.2,49.1,51.1,52.7],[50.0,51.7,53.7,55.7,57.4],[53.2,55.0,57.1,59.2,60.9],[55.8,57.6,59.8,62.0,63.8],
+    [58.0,59.8,62.1,64.3,66.2],[59.9,61.7,64.0,66.3,68.2],[61.5,63.4,65.7,68.1,70.0],[62.9,64.9,67.3,69.7,71.6],
+    [64.3,66.3,68.7,71.2,73.2],[65.6,67.6,70.1,72.6,74.7],[66.8,68.9,71.5,74.0,76.1],[68.0,70.2,72.8,75.4,77.5],
+    [69.2,71.3,74.0,76.7,78.9],[70.3,72.5,75.2,77.9,80.2],[71.3,73.6,76.4,79.2,81.4],[72.4,74.7,77.5,80.3,82.7],
+    [73.3,75.7,78.6,81.5,83.9],[74.3,76.7,79.7,82.6,85.0],[75.2,77.7,80.7,83.7,86.2],[76.2,78.7,81.7,84.8,87.3],
+    [77.0,79.6,82.7,85.8,88.4],[77.9,80.5,83.7,86.8,89.4],[78.7,81.4,84.6,87.8,90.5],[79.6,82.2,85.5,88.8,91.5],
+    [80.3,83.1,86.4,89.8,92.5]
+  ],
+  hc_cm: [
+    [31.7,32.7,33.9,35.1,36.1],[34.3,35.3,36.5,37.8,38.8],[36.0,37.0,38.3,39.5,40.5],[37.2,38.2,39.5,40.8,41.9],
+    [38.2,39.3,40.6,41.9,43.0],[39.0,40.1,41.5,42.8,43.9],[39.7,40.8,42.2,43.5,44.6],[40.4,41.5,42.8,44.2,45.3],
+    [40.9,42.0,43.4,44.7,45.9],[41.3,42.4,43.8,45.2,46.3],[41.7,42.8,44.2,45.6,46.8],[42.0,43.2,44.6,46.0,47.1],
+    [42.3,43.5,44.9,46.3,47.5],[42.6,43.8,45.2,46.6,47.7],[42.9,44.0,45.4,46.8,48.0],[43.1,44.2,45.7,47.1,48.2],
+    [43.3,44.4,45.9,47.3,48.5],[43.5,44.6,46.1,47.5,48.7],[43.6,44.8,46.2,47.7,48.8],[43.8,45.0,46.4,47.8,49.0],
+    [44.0,45.1,46.6,48.0,49.2],[44.1,45.3,46.7,48.2,49.4],[44.3,45.4,46.9,48.3,49.5],[44.4,45.6,47.0,48.5,49.7],
+    [44.6,45.7,47.2,48.6,49.8]
+  ]
+};
+const PCT_COLORS = ['#EDE3F2','#D8C6E6','#B79FD1','#D8C6E6','#EDE3F2'];
+
+/* ---------------- Vaccine schedule templates (region-aware, extensible) ---------------- */
+const VACCINE_SCHEDULES = {
+  generic: {
+    label: 'Generic starter template',
+    sourceNote: 'A common, generic template only — not tied to any specific country\'s official schedule. Always follow the schedule your pediatrician gives you.',
+    items: [
+      {name:'Hepatitis B', dose:'Dose 1', dueMonths:0},
+      {name:'BCG', dose:'', dueMonths:0},
+      {name:'DTaP / Pentavalent', dose:'Dose 1', dueMonths:1.5},
+      {name:'Polio', dose:'Dose 1', dueMonths:1.5},
+      {name:'Pneumococcal', dose:'Dose 1', dueMonths:1.5},
+      {name:'Rotavirus', dose:'Dose 1', dueMonths:1.5},
+      {name:'DTaP / Pentavalent', dose:'Dose 2', dueMonths:2.5},
+      {name:'Polio', dose:'Dose 2', dueMonths:2.5},
+      {name:'Pneumococcal', dose:'Dose 2', dueMonths:2.5},
+      {name:'Rotavirus', dose:'Dose 2', dueMonths:2.5},
+      {name:'DTaP / Pentavalent', dose:'Dose 3', dueMonths:3.5},
+      {name:'Polio', dose:'Dose 3', dueMonths:3.5},
+      {name:'Pneumococcal', dose:'Dose 3', dueMonths:3.5},
+      {name:'Measles', dose:'Dose 1', dueMonths:9},
+      {name:'MMR', dose:'Dose 1', dueMonths:12},
+      {name:'Hepatitis A', dose:'', dueMonths:12},
+      {name:'Varicella', dose:'', dueMonths:12},
+      {name:'DTaP', dose:'Booster', dueMonths:18},
+    ]
+  },
+  australia: {
+    label: 'Australia — National Immunisation Program',
+    sourceNote: 'Based on the Australian National Immunisation Program schedule (Dept. of Health, current from May 2026), general/standard schedule only — Aboriginal and Torres Strait Islander children and children with specified medical risk conditions may have additional recommended vaccines. Annual influenza vaccination (from 6 months) isn\'t included below since it repeats yearly — add it yourself if relevant. Always confirm timing with your GP or child health nurse.',
+    items: [
+      {name:'Hepatitis B', dose:'Birth dose', dueMonths:0},
+      {name:'6-in-1 (DTPa-hepB-IPV-Hib)', dose:'Dose 1', dueMonths:1.5},
+      {name:'Rotavirus', dose:'Dose 1', dueMonths:1.5},
+      {name:'Pneumococcal (PCV)', dose:'Dose 1', dueMonths:1.5},
+      {name:'6-in-1 (DTPa-hepB-IPV-Hib)', dose:'Dose 2', dueMonths:4},
+      {name:'Rotavirus', dose:'Dose 2', dueMonths:4},
+      {name:'Pneumococcal (PCV)', dose:'Dose 2', dueMonths:4},
+      {name:'6-in-1 (DTPa-hepB-IPV-Hib)', dose:'Dose 3', dueMonths:6},
+      {name:'Meningococcal ACWY', dose:'', dueMonths:12},
+      {name:'MMR (measles, mumps, rubella)', dose:'Dose 1', dueMonths:12},
+      {name:'Pneumococcal (PCV)', dose:'Dose 3', dueMonths:12},
+      {name:'Hib (Haemophilus influenzae type b)', dose:'Booster', dueMonths:18},
+      {name:'MMRV (measles, mumps, rubella, varicella)', dose:'', dueMonths:18},
+      {name:'DTPa (diphtheria, tetanus, pertussis)', dose:'Booster', dueMonths:18},
+      {name:'DTPa-IPV (incl. polio)', dose:'Pre-school booster', dueMonths:48},
+    ]
+  }
+};
+const DEFAULT_VACCINES = VACCINE_SCHEDULES.generic.items;
+
+/* ---------------- Storage: Firebase SDK (Auth + Firestore realtime) ----------------
+ * The Firebase config below is public by design — security comes from
+ * Firebase Authentication + Firestore Security Rules (UID allowlist), not secrecy. */
+const firebaseConfig = {
+  apiKey: "AIzaSyC_fEk--Wq6bFGa7Sgon5Vz4j5wjuO6f7M",
+  authDomain: "baby-growth-log.firebaseapp.com",
+  projectId: "baby-growth-log",
+  storageBucket: "baby-growth-log.firebasestorage.app",
+  messagingSenderId: "747639865841",
+  appId: "1:747639865841:web:2aad3330b75c3215d8c450"
+};
+let fbAuth = null, fbDb = null, authUser = null, authReady = false;
+let unsubscribeSnapshot = null;
+let initialDataLoaded = false;
+function initFirebase(){
+  if(typeof firebase === 'undefined'){
+    throw new Error('Firebase scripts did not load (blocked by network, ad-blocker, or offline).');
+  }
+  if(!firebase.apps || !firebase.apps.length){
+    firebase.initializeApp(firebaseConfig);
+  }
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+}
+function familyDocRef(){ return fbDb.collection('appdata').doc('family'); }
+
+function buildPayload(){
+  return {
+    profile: state.profile,
+    measurements: state.measurements,
+    feeds: state.feeds,
+    sleeps: state.sleeps,
+    milestones: state.milestones,
+    vaccines: state.vaccines,
+    appointments: state.appointments,
+    nappies: state.nappies,
+    prefs: state.prefs,
+    temperatures: state.temperatures,
+    healthRecords: state.healthRecords
+  };
+}
+async function firestoreGet(){
+  const snap = await familyDocRef().get();
+  if(!snap.exists) return null;
+  const data = snap.data();
+  return (data && data.json) ? JSON.parse(data.json) : null;
+}
+async function firestorePatch(payload){
+  await familyDocRef().set({ json: JSON.stringify(payload) }, { merge:true });
+}
+let lastSnapshotJSON = null;
+let suppressNextSnapshot = false;
+async function saveKey(key, value){
+  try{
+    const payload = buildPayload();
+    lastSnapshotJSON = JSON.stringify(payload);
+    suppressNextSnapshot = true;
+    await firestorePatch(payload);
+  }catch(e){ console.error('save failed', key, e); toast('Sync error — check your connection'); }
+}
+function applyRemote(remote){
+  state.profile = remote.profile || null;
+  state.measurements = remote.measurements || [];
+  state.feeds = remote.feeds || [];
+  state.sleeps = remote.sleeps || [];
+  state.milestones = remote.milestones || [];
+  state.vaccines = remote.vaccines || [];
+  state.appointments = remote.appointments || [];
+  state.nappies = remote.nappies || [];
+  state.prefs = remote.prefs || {};
+  state.temperatures = remote.temperatures || [];
+  state.healthRecords = remote.healthRecords || [];
+}
+function safeRerender(){
+  if(!state.profile){ render(); return; }
+  const ae = document.activeElement;
+  const isTyping = ae && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName);
+  if(isTyping) return; // don't clobber an in-progress edit
+  if(document.querySelector('nav.bottom')) renderMain();
+  else render();
+}
+/* Realtime sync: replaces the old 6-second polling. The other phone's changes
+   land within moments, and unchanged state costs nothing. */
+function startRealtimeSync(){
+  stopRealtimeSync();
+  unsubscribeSnapshot = familyDocRef().onSnapshot(snap=>{
+    const wasInitial = !initialDataLoaded;
+    initialDataLoaded = true;
+    if(suppressNextSnapshot && snap.metadata.hasPendingWrites===false){
+      suppressNextSnapshot = false;
+    }
+    if(snap.metadata.hasPendingWrites) return; // our own local write echo
+    const data = snap.exists ? snap.data() : null;
+    const remote = (data && data.json) ? JSON.parse(data.json) : null;
+    if(!remote){ if(wasInitial) render(); return; }
+    const remoteJSON = JSON.stringify(remote);
+    if(remoteJSON !== lastSnapshotJSON){
+      lastSnapshotJSON = remoteJSON;
+      applyRemote(remote);
+      if(state.prefs && state.prefs.lastFeedType) currentFeedSubtype = state.prefs.lastFeedType;
+      if(state.prefs && state.prefs.lastTempMethod) currentTempMethod = state.prefs.lastTempMethod;
+      if(state.prefs && state.prefs.lastHealthCat) currentHealthCat = state.prefs.lastHealthCat;
+      applyTheme();
+      if(wasInitial) render(); else safeRerender();
+    } else if(wasInitial){
+      render();
+    }
+  }, err=>{
+    console.error('snapshot error', err);
+    if(err && err.code==='permission-denied'){
+      toast('Access denied — check the Firestore rules include your account');
+    } else {
+      toast('Sync error — check your connection');
+    }
+    initialDataLoaded = true;
+    render();
+  });
+}
+function stopRealtimeSync(){
+  if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+}
+
+/* ---------------- Authentication ---------------- */
+async function signIn(email, password){
+  await fbAuth.signInWithEmailAndPassword(email, password);
+}
+async function signOutUser(){
+  stopRealtimeSync();
+  initialDataLoaded = false;
+  lastSnapshotJSON = null;
+  await fbAuth.signOut();
+}
+function friendlyAuthError(e){
+  const code = e && e.code || '';
+  if(code.includes('invalid-email')) return 'That email address doesn\'t look right.';
+  if(code.includes('user-not-found') || code.includes('wrong-password') || code.includes('invalid-credential') || code.includes('invalid-login-credentials')) return 'Email or password is incorrect.';
+  if(code.includes('too-many-requests')) return 'Too many attempts — wait a few minutes and try again.';
+  if(code.includes('network-request-failed')) return 'Network error — check your connection.';
+  return 'Sign-in failed. Please try again.';
+}
+
+/* ---------------- State ---------------- */
+let state = {
+  profile: null,
+  measurements: [],
+  feeds: [],
+  sleeps: [],
+  milestones: [],
+  vaccines: [],
+  appointments: [],
+  nappies: [],
+  prefs: {},
+  temperatures: [],
+  healthRecords: []
+};
+let currentView = 'home';
+let currentGrowthTab = 'weight';
+let growthZoomed = true;
+let currentAddType = 'feed';
+let currentFeedSubtype = 'breastfeeding';
+let currentSleepType = 'nap';
+let currentNappyType = 'wet';
+let currentTempMethod = 'axillary';
+let currentHealthCat = 'note';
+let timelineFilter = 'all';
+let expandedVaccineId = null;
+let markingGivenId = null;
+let expandedApptId = null;
+let completingApptId = null;
+let sheetOpen = false;
+let sheetStep = 'menu';
+let sheetShowTime = false;
+let sheetShowDetails = false;
+
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+/* App is always displayed/logged in Sydney time, regardless of the device's own timezone. */
+const APP_TZ = 'Australia/Sydney';
+function sydDateParts(dateInput){
+  const d = dateInput ? new Date(dateInput) : new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
+  }).formatToParts(d);
+  const get = t => parts.find(p=>p.type===t).value;
+  return { year:get('year'), month:get('month'), day:get('day'), hour:get('hour'), minute:get('minute') };
+}
+function sydDateKey(dateInput){ const p=sydDateParts(dateInput); return `${p.year}-${p.month}-${p.day}`; }
+function fmtDate(d){ return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric',timeZone:APP_TZ}); }
+function fmtDateTime(d){ return new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}); }
+function fmtDateFull(d){ return new Date(d).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:APP_TZ}); }
+function todayInput(){ const p=sydDateParts(); return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; }
+function todayDateInput(){ const p=sydDateParts(); return `${p.year}-${p.month}-${p.day}`; }
+function fmtDuration(mins){
+  mins = Math.round(mins||0);
+  const h = Math.floor(mins/60), m = mins%60;
+  return h>0 ? `${h}h ${m}m` : `${m}m`;
+}
+function timeAgo(dateISO){
+  const diffMs = Date.now() - new Date(dateISO).getTime();
+  const mins = Math.round(diffMs/60000);
+  if(mins<1) return 'just now';
+  if(mins<60) return `${mins}m ago`;
+  const hrs = Math.floor(mins/60), remM = mins%60;
+  if(hrs<24) return `${hrs}h ${remM}m ago`;
+  const days = Math.floor(hrs/24);
+  return `${days}d ago`;
+}
+/* Normalizes both legacy feed records ({method:'breast'|'bottle', side, mins, ml})
+   and new-format records ({type:'breastfeeding'|'expressed'|'formula'|'pumping', ...})
+   into one consistent shape so nothing already logged breaks. */
+function normalizeFeed(f){
+  if(f.type) return f;
+  if(f.method==='breast'){
+    const mins = Number(f.mins||0);
+    let leftMins=0, rightMins=0;
+    if(f.side==='Left') leftMins=mins;
+    else if(f.side==='Right') rightMins=mins;
+    else { leftMins=mins/2; rightMins=mins/2; }
+    return {...f, type:'breastfeeding', leftMins, rightMins, totalMins:mins};
+  }
+  return {...f, type:'formula', offeredMl:Number(f.ml||0), consumedMl:Number(f.ml||0)};
+}
+function feedSummaryLine(f){
+  const nf = normalizeFeed(f);
+  if(nf.type==='breastfeeding'){
+    const parts=[];
+    if(nf.leftMins) parts.push(`L ${Math.round(nf.leftMins)}m`);
+    if(nf.rightMins) parts.push(`R ${Math.round(nf.rightMins)}m`);
+    const total = nf.totalMins!=null ? nf.totalMins : (nf.leftMins||0)+(nf.rightMins||0);
+    return `🍼 Breastfeed · ${parts.join(' + ')||'—'} · ${Math.round(total)}m total`;
+  }
+  if(nf.type==='expressed') return `🍼 Expressed milk · ${nf.consumedMl}mL`;
+  if(nf.type==='formula') return `🍼 Formula · ${nf.consumedMl}mL`;
+  if(nf.type==='pumping') return `🔄 Pumping · ${nf.pumpTotalMl}mL (L${nf.pumpLeftMl||0}/R${nf.pumpRightMl||0})`;
+  return '🍼 Feed';
+}
+
+function ageParts(birthISO){
+  const birth = new Date(birthISO); const now = new Date();
+  let ms = now-birth; if(ms<0) ms=0;
+  const days = Math.floor(ms/86400000);
+  const weeks = Math.floor(days/7); const remDays = days%7;
+  const months = (now.getFullYear()-birth.getFullYear())*12 + (now.getMonth()-birth.getMonth()) - (now.getDate()<birth.getDate()?1:0);
+  return {days, weeks, remDays, months: Math.max(0,months)};
+}
+function ageLabelShort(birthISO){
+  const a = ageParts(birthISO);
+  if(a.weeks < 12) return `${a.weeks}w ${a.remDays}d`;
+  return `${a.months} mo`;
+}
+function ageMonthsDecimal(birthISO, atISO){
+  const birth = new Date(birthISO); const at = new Date(atISO||Date.now());
+  return Math.max(0,(at-birth)/(1000*60*60*24*30.4375));
+}
+/* Adds a (possibly fractional) number of months to a date using real calendar
+   month lengths rather than a fixed 30-day approximation. */
+function addMonthsPrecise(dateISO, months){
+  const d = new Date(dateISO);
+  const whole = Math.floor(months);
+  const frac = months - whole;
+  const result = new Date(d);
+  result.setMonth(result.getMonth()+whole);
+  if(frac>0){
+    const daysInMonth = new Date(result.getFullYear(), result.getMonth()+1, 0).getDate();
+    result.setDate(result.getDate() + Math.round(frac*daysInMonth));
+  }
+  return result;
+}
+function ordinalSuffix(n){
+  const s=['th','st','nd','rd'], v=n%100;
+  return n+(s[(v-20)%10]||s[v]||s[0]);
+}
+/* Corrected age support for babies born preterm (<37 weeks gestation). */
+function isPreterm(){
+  const g = state.profile && state.profile.gestWeeks;
+  return typeof g==='number' && g>0 && g<37;
+}
+function correctedAgeInfo(){
+  if(!isPreterm()) return null;
+  const gestWeeks = state.profile.gestWeeks + (state.profile.gestDays||0)/7;
+  const prematurityWeeks = 40 - gestWeeks;
+  if(prematurityWeeks<=0) return null;
+  const correctedRefDate = new Date(new Date(state.profile.birthDate).getTime() + prematurityWeeks*7*86400000);
+  const now = new Date();
+  if(correctedRefDate > now){
+    return { notYetTermEquivalent:true, dueDate: correctedRefDate };
+  }
+  const a = ageParts(correctedRefDate.toISOString());
+  return { label: a.weeks<12 ? `${a.weeks}w ${a.remDays}d` : `${a.months} mo`, notYetTermEquivalent:false };
+}
+/* ---------------- Vaccine status ---------------- */
+function vaccineStatus(v){
+  if(v.notApplicable) return 'na';
+  if(v.givenDate) return 'given';
+  if(!state.profile) return 'upcoming';
+  const due = addMonthsPrecise(state.profile.birthDate, v.dueMonths);
+  const daysDiff = (due - new Date())/86400000;
+  return daysDiff > 14 ? 'upcoming' : 'due';
+}
+function vaccineDueDate(v){
+  return state.profile ? addMonthsPrecise(state.profile.birthDate, v.dueMonths) : null;
+}
+
+function toast(msg){
+  const t = document.getElementById('toast'); if(!t) return;
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 1800);
+}
+function showUndoToast(msg, restoreFn){
+  const t = document.getElementById('toast'); if(!t) return;
+  t.innerHTML = `${escapeHtml(msg)} <button class="undo" id="undoBtn">Undo</button>`;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  const btn = document.getElementById('undoBtn');
+  if(btn) btn.addEventListener('click', async ()=>{ t.classList.remove('show'); await restoreFn(); });
+  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 4500);
+}
+
+/* ---------------- Percentile logic ---------------- */
+function bandIndex(type, ageMonths, value){
+  const table = WHO_GIRLS[type];
+  const idx = Math.min(24, Math.max(0, Math.round(ageMonths)));
+  const row = table[idx];
+  if(value < row[0]) return 0;
+  if(value < row[1]) return 1;
+  if(value < row[2]) return 2;
+  if(value < row[3]) return 3;
+  if(value < row[4]) return 4;
+  return 5;
+}
+const BAND_LABELS = ['below 3rd','3rd–15th','15th–50th','50th–85th','85th–97th','above 97th'];
+const TYPE_TO_TABLE = {weight:'weight_kg', length:'length_cm', hc:'hc_cm'};
+
+/* ---------------- Continuous percentile interpolation (for growth projection) ---------------- */
+const PCT_X = [3,15,50,85,97];
+function interpolateRow(tableKey, ageMonths){
+  const table = WHO_GIRLS[tableKey];
+  const clamped = Math.max(0, Math.min(24, ageMonths));
+  const lo = Math.floor(clamped), hi = Math.min(24, Math.ceil(clamped));
+  if(lo===hi) return table[lo];
+  const frac = clamped - lo;
+  return table[lo].map((v,i)=> v + frac*(table[hi][i]-v));
+}
+function percentileScore(row, value){
+  if(value <= row[0]){
+    const rate = (row[1]-row[0]) / (PCT_X[1]-PCT_X[0]);
+    return PCT_X[0] - (row[0]-value)/rate;
+  }
+  for(let i=0;i<4;i++){
+    if(value>=row[i] && value<=row[i+1]){
+      const frac = (value-row[i])/(row[i+1]-row[i]);
+      return PCT_X[i] + frac*(PCT_X[i+1]-PCT_X[i]);
+    }
+  }
+  const rate = (row[4]-row[3]) / (PCT_X[4]-PCT_X[3]);
+  return PCT_X[4] + (value-row[4])/rate;
+}
+function valueAtScore(row, score){
+  if(score<=PCT_X[0]){
+    const rate = (row[1]-row[0]) / (PCT_X[1]-PCT_X[0]);
+    return row[0] - (PCT_X[0]-score)*rate;
+  }
+  for(let i=0;i<4;i++){
+    if(score>=PCT_X[i] && score<=PCT_X[i+1]){
+      const frac = (score-PCT_X[i])/(PCT_X[i+1]-PCT_X[i]);
+      return row[i] + frac*(row[i+1]-row[i]);
+    }
+  }
+  const rate = (row[4]-row[3]) / (PCT_X[4]-PCT_X[3]);
+  return row[4] + (score-PCT_X[4])*rate;
+}
+// Projects her next weekly weigh-in target by holding her current percentile
+// position steady on the WHO curve — i.e. "what would keep her tracking on
+// her own trajectory," not a generic average.
+function projectNextWeighIn(){
+  const list = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(!list.length) return null;
+  const latest = list[list.length-1];
+  const curAge = ageMonthsDecimal(state.profile.birthDate, latest.date);
+  const nextDate = new Date(new Date(latest.date).getTime() + 7*86400000);
+  const nextAge = ageMonthsDecimal(state.profile.birthDate, nextDate.toISOString());
+  const curRow = interpolateRow('weight_kg', curAge);
+  const score = percentileScore(curRow, latest.value);
+  const nextRow = interpolateRow('weight_kg', Math.min(24, nextAge));
+  const idealVal = valueAtScore(nextRow, score);
+  const gainG = Math.round((idealVal - latest.value) * 1000);
+  const daysUntil = Math.round((nextDate - new Date()) / 86400000);
+  return { lastDate: latest.date, lastValue: latest.value, nextDate, idealVal, gainG, daysUntil };
+}
+
+function growthNarrative(type){
+  const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(!list.length) return null;
+  const tableKey = TYPE_TO_TABLE[type];
+  const latest = list[list.length-1];
+  const ageM = ageMonthsDecimal(state.profile.birthDate, latest.date);
+  const row = interpolateRow(tableKey, ageM);
+  const score = Math.round(percentileScore(row, latest.value));
+  const ordinal = ordinalSuffix(score);
+  const noun = type==='weight'?'weight':type==='length'?'length':'head circumference';
+
+  let msg = `${state.profile.name}'s latest ${noun} (${latest.value}${unitFor(type)}) plots around the ${ordinal} percentile on the WHO ${noun}-for-age chart.`;
+
+  if(list.length>=2){
+    const prev = list[list.length-2];
+    const prevAgeM = ageMonthsDecimal(state.profile.birthDate, prev.date);
+    const prevRow = interpolateRow(tableKey, prevAgeM);
+    const prevScore = Math.round(percentileScore(prevRow, prev.value));
+    msg += ` Her previous measurement plotted around the ${ordinalSuffix(prevScore)} percentile. Repeated measurements over time are generally more informative than any single percentile reading.`;
+  } else {
+    msg += ` Repeated measurements over time are generally more informative than any single percentile reading — this is just her first.`;
+  }
+  return { verdict:`Tracking around the ${ordinal} percentile`, msg, score };
+}
+/* "Birth → Lowest → Regained → Latest" summary (mainly meaningful for weight,
+   which commonly dips below birth weight in the first days). */
+function growthSinceBirth(type){
+  const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(list.length<2) return null;
+  const birth = list[0];
+  let lowest = list[0];
+  list.forEach(m=>{ if(m.value<lowest.value) lowest=m; });
+  let regained = null;
+  if(lowest.id!==birth.id){
+    for(const m of list){ if(new Date(m.date)>new Date(lowest.date) && m.value>=birth.value){ regained=m; break; } }
+  }
+  const latest = list[list.length-1];
+  return { birth, lowest, regained, latest, hasDip: lowest.id!==birth.id };
+}
+/* Detailed trend stats: since-birth change, %, rate/day, since-previous change, age at measurement. */
+function growthTrend(type){
+  const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(list.length<2) return { insufficient:true };
+  const first = list[0], latest = list[list.length-1];
+  const prev = list[list.length-2];
+  const daysSinceBirth = (new Date(latest.date)-new Date(first.date))/86400000;
+  const diffSinceBirth = latest.value - first.value;
+  const pctSinceBirth = first.value!==0 ? (diffSinceBirth/first.value*100) : null;
+  const perDay = daysSinceBirth>0 ? (diffSinceBirth/daysSinceBirth) : null;
+  const diffSincePrev = latest.value - prev.value;
+  const daysSincePrev = (new Date(latest.date)-new Date(prev.date))/86400000;
+  return { insufficient:false, first, latest, prev, daysSinceBirth, diffSinceBirth, pctSinceBirth, perDay, diffSincePrev, daysSincePrev };
+}
+
+/* ---------------- SVG growth chart ---------------- */
+function buildChartSVG(type, points, maxAgeWindow){
+  const table = WHO_GIRLS[type];
+  const W = 400, H = 250, padL = 34, padR = 12, padT = 14, padB = 26;
+  const maxAge = maxAgeWindow || 24;
+  const rowCount = Math.min(24, Math.ceil(maxAge)) + 1;
+  const dark = isDarkMode();
+  const gridColor = dark ? 'rgba(61,53,68,0.55)' : 'rgba(237,227,242,0.7)';
+  const textColor = dark ? '#83788F' : '#AFA8B7';
+  const bandFill = dark ? '#C3AADD' : '#B79FD1';
+  const childStroke = dark ? '#F2A796' : '#EC9384';
+  const pointStroke = dark ? '#28232D' : '#fff';
+  const labelColor = dark ? '#F0B3A6' : '#B5525B';
+  /* WHO reference: quiet. 50th = thin muted dashed; other curves only when expanded. */
+  const midCurveColor = dark ? '#6B5F79' : '#C9B8DB';
+  const outerCurveColor = dark ? '#4A4152' : '#DDD1E8';
+  let minV = Infinity, maxV = -Infinity;
+  table.slice(0, rowCount).forEach(row=>{ minV=Math.min(minV,row[0]); maxV=Math.max(maxV,row[4]); });
+  points.forEach(p=>{ if(p.m<=maxAge){ minV=Math.min(minV,p.v); maxV=Math.max(maxV,p.v); } });
+  const pad = (maxV-minV)*0.1 || 1;
+  minV -= pad; maxV += pad;
+  const x = m => padL + (Math.min(m,maxAge)/maxAge)*(W-padL-padR);
+  const y = v => padT + (1-((v-minV)/(maxV-minV)))*(H-padT-padB);
+  function pathFor(colIdx){
+    return table.slice(0, rowCount).map((row,i)=> (i===0?'M':'L') + x(i).toFixed(1) + ',' + y(row[colIdx]).toFixed(1)).join(' ');
+  }
+  /* Parent-friendly X labels: whole months ("Birth · 1m · 2m") for short windows */
+  let tickStep = maxAge<=8 ? 1 : maxAge<=12 ? 2 : 6;
+  let ticks = []; for(let t=0;t<=maxAge+0.01;t+=tickStep) ticks.push(Math.round(t));
+  const monthLabel = m => m===0 ? 'Birth' : `${m}m`;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:hidden" font-family="IBM Plex Mono, monospace" role="img" aria-label="${labelType(type)} chart plotted against WHO reference">`;
+  /* 3 gridlines instead of 5, lower opacity */
+  for(let g=0; g<=2; g++){
+    const v = minV + (maxV-minV)*g/2; const yy = y(v);
+    svg += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="${gridColor}" stroke-width="1"/>`;
+    svg += `<text x="2" y="${(yy+3).toFixed(1)}" font-size="8.5" fill="${textColor}">${v.toFixed(1)}</text>`;
+  }
+  ticks.forEach(m=>{
+    svg += `<text x="${x(m).toFixed(1)}" y="${H-8}" font-size="8.5" fill="${textColor}" text-anchor="middle">${monthLabel(m)}</text>`;
+  });
+  const rows = table.slice(0, rowCount);
+  const topPath = rows.map((row,i)=> (i===0?'M':'L') + x(i).toFixed(1) + ',' + y(row[4]).toFixed(1)).join(' ');
+  const botPath = rows.slice().reverse().map((row,i)=> 'L' + x(rowCount-1-i).toFixed(1) + ',' + y(row[0]).toFixed(1)).join(' ');
+  /* 3rd–97th band: very low opacity */
+  svg += `<path d="${topPath} ${botPath} Z" fill="${bandFill}" opacity="${dark?0.07:0.05}"/>`;
+  if(showWhoCurves){
+    /* Expanded: all five reference curves, still quiet */
+    [0,1,3,4].forEach((colIdx)=>{
+      svg += `<path d="${pathFor(colIdx)}" fill="none" stroke="${outerCurveColor}" stroke-width="1" stroke-dasharray="3,4" opacity="0.85"/>`;
+    });
+  }
+  /* 50th percentile: thin muted dashed, always */
+  svg += `<path d="${pathFor(2)}" fill="none" stroke="${midCurveColor}" stroke-width="1.2" stroke-dasharray="4,4"/>`;
+  const visiblePts = points.filter(p=>p.m<=maxAge+0.05);
+  if(visiblePts.length){
+    /* Vertical guide line through selected point */
+    if(chartActivePointIdx!=null && visiblePts[chartActivePointIdx]){
+      const gp = visiblePts[chartActivePointIdx];
+      svg += `<line x1="${x(gp.m).toFixed(1)}" y1="${padT}" x2="${x(gp.m).toFixed(1)}" y2="${(H-padB).toFixed(1)}" stroke="${childStroke}" stroke-width="1" opacity="0.35" stroke-dasharray="2,3"/>`;
+    }
+    /* Baby's line: the visual hero */
+    const dPath = visiblePts.map((p,i)=> (i===0?'M':'L') + x(p.m).toFixed(1) + ',' + y(p.v).toFixed(1)).join(' ');
+    svg += `<path d="${dPath}" fill="none" stroke="${childStroke}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
+    visiblePts.forEach((p,i)=>{
+      const isActive = i===chartActivePointIdx;
+      const isNewest = i===visiblePts.length-1;
+      const r = isActive ? 7 : isNewest ? 5.5 : 4;
+      svg += `<circle class="chart-pt" data-idx="${i}" cx="${x(p.m).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="13" fill="transparent" style="cursor:pointer;" role="button" aria-label="${labelType(type)} ${p.v}${unitFor(type)}, around the ${Math.round(p.score)}th percentile"/>`;
+      svg += `<circle class="${isNewest?'pt-new':''}" cx="${x(p.m).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="${r}" fill="${childStroke}" stroke="${pointStroke}" stroke-width="${isActive?3:2}" pointer-events="none"/>`;
+      /* Only the latest point carries a permanent label */
+      if(isNewest && !isActive){
+        svg += `<text x="${(x(p.m)+10).toFixed(1)}" y="${(y(p.v)+3).toFixed(1)}" font-size="9" fill="${labelColor}" font-weight="600" pointer-events="none">${Math.round(p.score)}th</text>`;
+      }
+    });
+  }
+  svg += `</svg>`;
+  chartPointsCache = visiblePts;
+  return svg;
+}
+
+/* ---------------- Icons ---------------- */
+function icon(name, size){
+  size = size || 20;
+  const paths = {
+    home: '<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>',
+    timeline: '<circle cx="5" cy="6" r="1.6"/><circle cx="5" cy="12" r="1.6"/><circle cx="5" cy="18" r="1.6"/><path d="M10 6h10M10 12h10M10 18h10"/>',
+    growth: '<path d="M4 19V9M12 19V4M20 19v-6"/>',
+    health: '<path d="M12 2v6M12 22v-6M4.9 4.9l4.2 4.2M15 15l4.2 4.2M2 12h6M16 12h6M4.9 19.1l4.2-4.2M15 9l4.2-4.2"/><circle cx="12" cy="12" r="3"/>',
+    star: '<path d="M12 2l2.9 6.6L22 9.3l-5 4.9 1.2 7.1L12 17.9l-6.2 3.4L7 14.2 2 9.3l7.1-.7z"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    feed: '<path d="M9 2v4M15 2v4M8 6h8l1 4H7l1-4z"/><path d="M7 10v9a2 2 0 002 2h6a2 2 0 002-2v-9"/><path d="M10 14h4"/>',
+    nappy: '<path d="M4 8c0 7 3.5 12 8 12s8-5 8-12"/><path d="M4 8h16"/><path d="M8 8V6a4 4 0 018 0v2"/>',
+    sleep: '<path d="M20 14.5A8.5 8.5 0 1110.5 4a7 7 0 009.5 10.5z"/>',
+    pump: '<circle cx="9" cy="9" r="4"/><circle cx="17" cy="15" r="4"/><path d="M12 9h2M9 12v2M14 15h1M17 12v1"/>',
+    ruler: '<rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v3M15 8v3M19 8v3"/>',
+    temp: '<path d="M12 14.5V5a2 2 0 10-4 0v9.5a4 4 0 104 0z"/><path d="M10 8h2"/>',
+    back: '<path d="M15 18l-6-6 6-6"/>',
+    check: '<path d="M20 6L9 17l-5-5"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
+    shield: '<path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3z"/>'
+  };
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
+}
+
+function renderLogin(loginError, busy){
+  return `
+    <div class="onboard">
+      <div class="mark">🌸</div>
+      <h1>Welcome back</h1>
+      <p class="sub">Sign in to see your family's tracker.</p>
+      <label>Email</label>
+      <input type="email" id="loginEmail" autocomplete="email" inputmode="email" placeholder="you@example.com">
+      <label>Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Password">
+      ${loginError ? `<div class="note" style="color:var(--status-critical-fg);font-weight:700;margin-top:10px;">${escapeHtml(loginError)}</div>` : ''}
+      <button class="btn" id="loginBtn" ${busy?'disabled':''}>${busy ? 'Signing in…' : 'Sign in'}</button>
+      <div class="note" style="margin-top:14px;">Access is limited to family accounts. If you've forgotten the password, it can be reset from the Firebase console.</div>
+    </div>
+  `;
+}
+function bindLogin(){
+  const doLogin = async ()=>{
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if(!email || !password) return;
+    document.getElementById('app').innerHTML = renderLogin(null, true);
+    try{
+      await signIn(email, password);
+      /* onAuthStateChanged handles the rest */
+    }catch(e){
+      console.error('sign-in failed', e);
+      document.getElementById('app').innerHTML = renderLogin(friendlyAuthError(e), false);
+      bindLogin();
+    }
+  };
+  const btn = document.getElementById('loginBtn');
+  if(btn) btn.addEventListener('click', doLogin);
+  const pw = document.getElementById('loginPassword');
+  if(pw) pw.addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  const em = document.getElementById('loginEmail');
+  if(em) em.focus();
+}
+function renderLoadingScreen(){
+  return `
+    <div class="onboard" style="align-items:center;text-align:center;">
+      <div class="mark">🌸</div>
+      <p class="sub">Loading…</p>
+    </div>
+  `;
+}
+function renderStartupError(message){
+  return `
+    <div class="onboard" style="align-items:center;text-align:center;">
+      <div class="mark">⚠️</div>
+      <h1 style="font-size:22px;">Couldn't connect</h1>
+      <p class="sub">${escapeHtml(message)}</p>
+      <button class="btn" id="retryBootBtn">Try again</button>
+      <div class="note" style="margin-top:14px;">If this keeps happening: check your internet connection, make sure no browser extension is blocking Google/Firebase scripts, and check the browser console for the exact error.</div>
+    </div>
+  `;
+}
+function render(){
+  const app = document.getElementById('app');
+  if(!authReady){ app.innerHTML = renderLoadingScreen(); return; }
+  if(!authUser){ app.innerHTML = renderLogin(); bindLogin(); return; }
+  if(!initialDataLoaded){ app.innerHTML = renderLoadingScreen(); return; }
+  if(!state.profile){ app.innerHTML = renderOnboard(); bindOnboard(); return; }
+  app.innerHTML = `
+    <header class="top">
+      <span class="brand">🌸 ${escapeHtml(state.profile.name)}</span>
+      <span class="age">${ageLabelShort(state.profile.birthDate)} old</span>
+    </header>
+    <main id="main"></main>
+    <nav class="bottom">
+      <button data-view="home" class="${currentView==='home'?'active':''}">${icon('home')}Home</button>
+      <button data-view="timeline" class="${currentView==='timeline'?'active':''}">${icon('timeline')}Timeline</button>
+      <button data-view="growth" class="${currentView==='growth'?'active':''}">${icon('growth')}Growth</button>
+      <button data-view="health" class="${currentView==='health'?'active':''}">${icon('health')}Health</button>
+      <button data-view="milestones" class="${currentView==='milestones'?'active':''}">${icon('star')}Moments</button>
+    </nav>
+    <button class="fab" id="fabAdd" aria-label="Quick log">${icon('plus',20)}Log</button>
+    <div class="sheet-overlay" id="sheetOverlay">
+      <div class="sheet" id="sheetPanel"></div>
+    </div>
+    <div class="toast" id="toast"></div>
+  `;
+  document.querySelectorAll('nav.bottom button[data-view]').forEach(b=>{
+    b.addEventListener('click', ()=>{ sheetOpen=false; currentView=b.dataset.view; render(); });
+  });
+  document.getElementById('fabAdd').addEventListener('click', ()=> openSheet('menu'));
+  document.getElementById('sheetOverlay').addEventListener('click', (e)=>{ if(e.target.id==='sheetOverlay') closeSheet(); });
+  renderMain();
+}
+function renderMain(){
+  const main = document.getElementById('main');
+  if(currentView==='home') { main.innerHTML = renderHome(); bindHome(); }
+  else if(currentView==='add') { main.innerHTML = renderAdd(); bindAdd(); }
+  else if(currentView==='growth') { main.innerHTML = renderGrowth(); bindGrowth(); }
+  else if(currentView==='care') { main.innerHTML = renderCare(); bindCare(); }
+  else if(currentView==='health') { main.innerHTML = renderHealth(); bindHealth(); }
+  else if(currentView==='milestones') { main.innerHTML = renderMilestones(); bindMilestones(); }
+  else if(currentView==='timeline') { main.innerHTML = renderTimeline(); bindTimeline(); }
+  else if(currentView==='export') { main.innerHTML = renderExport(); bindExport(); }
+  if(sheetOpen) renderSheet();
+}
+let sheetPumpForced = false;
+let sheetDetailKind = null, sheetDetailId = null;
+let pendingRestoreData = null;
+let chartActivePointIdx = null;
+let chartPointsCache = [];
+let growthExplainOpen = false;
+let showWhoCurves = false;
+function openDetailSheet(kind, id){
+  sheetDetailKind = kind; sheetDetailId = id;
+  sheetOpen = true; sheetStep = 'detail'; sheetShowTime=false; sheetShowDetails=false;
+  renderSheet();
+}
+function openSheet(step){ sheetOpen=true; goToStep(step||'menu'); }
+function closeSheet(){
+  sheetOpen=false;
+  const overlay=document.getElementById('sheetOverlay');
+  if(overlay) overlay.classList.remove('open');
+}
+function flashButtonSuccess(id, label){
+  return new Promise(resolve=>{
+    const btn = document.getElementById(id);
+    if(btn){ btn.textContent = label; btn.disabled = true; }
+    setTimeout(resolve, 350);
+  });
+}
+function goToStep(key){
+  sheetShowTime=false; sheetShowDetails=false;
+  if(key==='pump'){ sheetStep='feed'; sheetPumpForced=true; }
+  else { sheetStep=key; sheetPumpForced=false; }
+  renderSheet();
+}
+function renderSheet(){
+  const overlay = document.getElementById('sheetOverlay');
+  const panel = document.getElementById('sheetPanel');
+  if(!overlay || !panel) return;
+  if(sheetOpen){
+    overlay.classList.add('open');
+    panel.innerHTML = `<div class="sheet-handle"></div>` + renderSheetContent();
+    bindSheet();
+  } else {
+    overlay.classList.remove('open');
+  }
+}
+function nowTimeRow(inputId, dateOnly){
+  const val = dateOnly ? todayDateInput() : todayInput();
+  if(!sheetShowTime){
+    return `<div class="ql-nowrow"><span>Now</span><button data-showtime="1">Change</button><input type="hidden" id="${inputId}" value="${val}"></div>`;
+  }
+  return `<label>Time</label><input type="${dateOnly?'date':'datetime-local'}" id="${inputId}" value="${val}">`;
+}
+function renderSheetContent(){
+  if(sheetStep==='menu') return renderQuickLogMenu();
+  if(sheetStep==='nappy') return renderQuickLogNappy();
+  if(sheetStep==='feed') return renderQuickLogFeed(sheetPumpForced);
+  if(sheetStep==='sleep') return renderQuickLogSleep();
+  if(sheetStep==='temp') return renderQuickLogTemp();
+  if(sheetStep==='weight') return renderQuickLogWeight();
+  if(sheetStep==='moment') return renderQuickLogMoment();
+  if(sheetStep==='detail') return renderDetailSheet();
+  if(sheetStep==='restoreConfirm') return renderRestoreConfirmSheet();
+  return '';
+}
+function renderDetailSheet(){
+  const m = DELETE_MAP[sheetDetailKind];
+  const item = m ? state[m.arr].find(x=>x.id===sheetDetailId) : null;
+  if(!item) return `<div class="sheet-title">Details</div><div class="empty">This entry was removed.</div>`;
+  let title='', lines=[];
+  if(sheetDetailKind==='feed'){ const nf=normalizeFeed(item); title='Feed'; lines=[feedSummaryLine(item), fmtDateTime(nf.date), item.note]; }
+  else if(sheetDetailKind==='nappy'){ title='Nappy'; lines=[item.type==='wet'?'Wet':item.type==='poo'?'Poo':'Wet + poo', fmtDateTime(item.date), item.note]; }
+  else if(sheetDetailKind==='sleep'){ title='Sleep'; lines=[`${item.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(item.mins)}`, fmtDateTime(item.date)]; }
+  else if(sheetDetailKind==='measurement'){ title=labelType(item.type); lines=[`${item.value}${unitFor(item.type)}`, fmtDateTime(item.date), item.note]; }
+  else if(sheetDetailKind==='vaccine'){ title=item.name; lines=[item.dose, item.givenDate?`Given ${fmtDate(item.givenDate)}`:'Not yet given', item.provider?('Provider: '+item.provider):null]; }
+  else if(sheetDetailKind==='appointment'){ title=item.title; lines=[fmtDateFull(item.date), item.note]; }
+  else if(sheetDetailKind==='temperature'){ title='Temperature'; lines=[`${item.tempC}°C · ${item.method}`, fmtDateTime(item.date), item.note]; }
+  else if(sheetDetailKind==='healthRecord'){ title=item.title; lines=[fmtDateTime(item.date), item.details]; }
+  else if(sheetDetailKind==='milestone'){ title=item.title; lines=[`${fmtDate(item.date)} · ${momentAgeLabel(item.date)}`, item.note]; }
+  lines = lines.filter(Boolean);
+  return `
+    <div class="sheet-title">${escapeHtml(title)}</div>
+    ${lines.map(l=>`<div class="support-text" style="margin-top:2px;">${escapeHtml(l)}</div>`).join('')}
+    <button class="btn" style="background:var(--status-critical-fg);margin-top:20px;" id="detailDeleteBtn">Delete entry</button>
+  `;
+}
+function renderRestoreConfirmSheet(){
+  if(!pendingRestoreData) return `<div class="sheet-title">Restore backup?</div><div class="empty">No backup loaded.</div>`;
+  const d = pendingRestoreData;
+  const ad = d.appData;
+  const counts = [
+    ['feeds', (ad.feeds||[]).length],
+    ['sleep records', (ad.sleeps||[]).length],
+    ['nappies', (ad.nappies||[]).length],
+    ['measurements', (ad.measurements||[]).length],
+    ['appointments', (ad.appointments||[]).length],
+    ['vaccines', (ad.vaccines||[]).length],
+    ['moments', (ad.milestones||[]).length],
+  ].filter(([,c])=>c>0);
+  return `
+    <div class="sheet-title">Restore backup?</div>
+    <div class="support-text" style="margin-top:0;">Backup created<br><b>${fmtDateTime(d.createdAt)}</b></div>
+    <div class="support-text" style="margin-top:10px;">Baby<br><b>${escapeHtml(ad.profile.name)}</b></div>
+    ${counts.length ? `
+    <div class="support-text" style="margin-top:10px;">Contains:</div>
+    <div style="margin-top:2px;">${counts.map(([l,c])=>`<div style="font-size:13px;padding:3px 0;color:var(--ink);">${c} ${l}</div>`).join('')}</div>
+    ` : ''}
+    <div class="note" style="margin-top:14px;color:var(--status-critical-fg);font-weight:700;">Restoring this backup will replace the current tracker data on this device with the contents of this backup. This can't be undone.</div>
+    <button class="btn" style="background:var(--status-critical-fg);margin-top:16px;" id="confirmRestoreBtn">Restore</button>
+    <button class="ql-link" id="cancelRestoreBtn">Cancel</button>
+  `;
+}
+function renderQuickLogMenu(){
+  const items = [
+    {key:'feed', label:'Feed', ic:'feed'},
+    {key:'nappy', label:'Nappy', ic:'nappy'},
+    {key:'sleep', label:'Sleep', ic:'sleep'},
+    {key:'pump', label:'Pump', ic:'pump'},
+    {key:'weight', label:'Measurement', ic:'ruler'},
+    {key:'temp', label:'Temperature', ic:'temp'},
+    {key:'moment', label:'Moment', ic:'star'}
+  ];
+  return `
+    <div class="sheet-title">Quick log</div>
+    <div class="ql-grid">
+      ${items.map(i=>`<button class="ql-item" data-qlopen="${i.key}">${icon(i.ic,22)}<span>${i.label}</span></button>`).join('')}
+    </div>
+    <button class="ql-more" id="qlMore">More options</button>
+  `;
+}
+function renderQuickLogNappy(){
+  if(sheetShowDetails){
+    return `
+      <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Nappy details</div>
+      <label>Type</label>
+      <div class="seg" id="nappyTypeSeg">
+        <button data-nt="wet" class="${currentNappyType==='wet'?'active':''}">Wet</button>
+        <button data-nt="poo" class="${currentNappyType==='poo'?'active':''}">Poo</button>
+        <button data-nt="both" class="${currentNappyType==='both'?'active':''}">Both</button>
+      </div>
+      ${nowTimeRow('nappyDateInput')}
+      <label>Note (optional)</label>
+      <input type="text" id="nappyNoteInput" placeholder="optional">
+      <button class="btn" id="saveNappyDetailed">Save nappy</button>
+    `;
+  }
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Nappy</div>
+    <div class="ql-choice-row">
+      <button class="ql-choice" data-nappyquick="wet">${icon('nappy',22)}<span>Wet</span></button>
+      <button class="ql-choice" data-nappyquick="poo">${icon('nappy',22)}<span>Poo</span></button>
+      <button class="ql-choice" data-nappyquick="both">${icon('nappy',22)}<span>Both</span></button>
+    </div>
+    <button class="ql-link" id="qlNappyDetails">Add details</button>
+  `;
+}
+function renderQuickLogFeed(forcePump){
+  const subtype = forcePump ? 'pumping' : currentFeedSubtype;
+  const subs = [
+    {key:'breastfeeding', label:'Breast'},
+    {key:'expressed', label:'Expressed'},
+    {key:'formula', label:'Formula'},
+    {key:'pumping', label:'Pump'}
+  ];
+  let fields = '';
+  if(subtype==='breastfeeding'){
+    fields = `
+      <div class="fieldrow">
+        <div><label>Left (min)</label><input type="number" inputmode="numeric" id="qlFeedLeft" placeholder="0" autofocus></div>
+        <div><label>Right (min)</label><input type="number" inputmode="numeric" id="qlFeedRight" placeholder="0"></div>
+      </div>
+      ${state.prefs && state.prefs.lastBreastSide ? `<div class="meta-text">Last breast used: ${state.prefs.lastBreastSide}</div>` : ''}
+    `;
+  } else if(subtype==='expressed' || subtype==='formula'){
+    fields = `
+      <div class="fieldrow">
+        <div><label>Offered (mL)</label><input type="number" inputmode="numeric" id="qlFeedOffered" placeholder="90" autofocus></div>
+        <div><label>Consumed (mL)</label><input type="number" inputmode="numeric" id="qlFeedConsumed" placeholder="90"></div>
+      </div>
+    `;
+  } else if(subtype==='pumping'){
+    fields = `
+      <div class="fieldrow">
+        <div><label>Left (mL)</label><input type="number" inputmode="numeric" id="qlPumpLeft" placeholder="0" autofocus></div>
+        <div><label>Right (mL)</label><input type="number" inputmode="numeric" id="qlPumpRight" placeholder="0"></div>
+      </div>
+      <label>Duration (min)</label><input type="number" inputmode="numeric" id="qlPumpDuration" placeholder="15">
+    `;
+  }
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${forcePump?'Pump':'Feed'}</div>
+    ${forcePump ? '' : `<div class="seg" id="qlFeedSubtypeSeg">${subs.map(s=>`<button data-fs="${s.key}" class="${subtype===s.key?'active':''}">${s.label}</button>`).join('')}</div>`}
+    ${fields}
+    ${nowTimeRow('qlFeedDate')}
+    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlFeedNote" placeholder="optional">` : `<button class="ql-link" id="qlFeedAddDetails">Add note</button>`}
+    <button class="btn" id="qlSaveFeed" data-subtype="${subtype}">Save feed</button>
+  `;
+}
+function renderQuickLogSleep(){
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Sleep</div>
+    <div class="seg" id="qlSleepTypeSeg">
+      <button data-s="nap" class="${currentSleepType==='nap'?'active':''}">Nap</button>
+      <button data-s="night" class="${currentSleepType==='night'?'active':''}">Night</button>
+    </div>
+    <label>Duration (minutes)</label>
+    <input type="number" inputmode="numeric" id="qlSleepMins" placeholder="90" autofocus>
+    ${nowTimeRow('qlSleepDate')}
+    <button class="btn" id="qlSaveSleep">Save sleep</button>
+  `;
+}
+function renderQuickLogTemp(){
+  const methods = ['axillary','rectal','ear','forehead','other'];
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Temperature</div>
+    <label>Temperature (°C)</label>
+    <input type="number" step="0.1" inputmode="decimal" id="qlTempVal" placeholder="37.1" autofocus>
+    <label>Method</label>
+    <select id="qlTempMethod">${methods.map(m=>`<option value="${m}" ${currentTempMethod===m?'selected':''}>${m.charAt(0).toUpperCase()+m.slice(1)}</option>`).join('')}</select>
+    ${nowTimeRow('qlTempDate')}
+    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlTempNote" placeholder="optional">` : `<button class="ql-link" id="qlTempAddDetails">Add note</button>`}
+    <button class="btn" id="qlSaveTemp">Save temperature</button>
+  `;
+}
+function renderQuickLogWeight(){
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Measurement</div>
+    <div class="seg" id="qlMeasureTypeSeg">
+      <button data-mt="weight" class="active">Weight</button>
+      <button data-mt="length">Length</button>
+      <button data-mt="hc">Head</button>
+    </div>
+    <label id="qlMeasureLabel">Weight (kg)</label>
+    <input type="number" step="0.01" inputmode="decimal" id="qlMeasureVal" placeholder="e.g. 3.65" autofocus>
+    ${nowTimeRow('qlMeasureDate')}
+    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlMeasureNote" placeholder="optional">` : `<button class="ql-link" id="qlMeasureAddDetails">Add note</button>`}
+    <button class="btn" id="qlSaveMeasure" data-mtype="weight">Save measurement</button>
+  `;
+}
+function renderQuickLogMoment(){
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Moment</div>
+    <label>What happened</label>
+    <input type="text" id="qlMomentTitle" placeholder="e.g. First smile" autofocus>
+    ${nowTimeRow('qlMomentDate', true)}
+    ${sheetShowDetails ? `
+      <label>Photo (optional)</label><input type="file" accept="image/*" id="qlMomentPhoto">
+      <label>Note (optional)</label><textarea id="qlMomentNote" rows="2" placeholder="optional"></textarea>
+    ` : `<button class="ql-link" id="qlMomentAddDetails">Add photo &amp; note</button>`}
+    <button class="btn" id="qlSaveMoment">Save moment</button>
+  `;
+}
+function bindSheet(){
+  document.querySelectorAll('[data-qlopen]').forEach(b=>{
+    b.addEventListener('click', ()=> goToStep(b.dataset.qlopen));
+  });
+  const more = document.getElementById('qlMore');
+  if(more) more.addEventListener('click', ()=>{ closeSheet(); currentView='add'; render(); });
+  document.querySelectorAll('[data-backmenu]').forEach(b=>{
+    b.addEventListener('click', ()=> goToStep('menu'));
+  });
+  document.querySelectorAll('[data-showtime]').forEach(b=>{
+    b.addEventListener('click', ()=>{ sheetShowTime=true; renderSheet(); });
+  });
+
+  document.querySelectorAll('[data-nappyquick]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const type = b.dataset.nappyquick;
+      const rec = {id:uid(), type, date:new Date().toISOString(), note:''};
+      state.nappies.push(rec);
+      await saveKey('nappies', state.nappies);
+      closeSheet(); renderMain();
+      const label = type==='wet'?'Wet nappy':type==='poo'?'Poo nappy':'Wet + poo nappy';
+      showUndoToast(`✓ ${label} logged`, async ()=>{
+        state.nappies = state.nappies.filter(x=>x.id!==rec.id);
+        await saveKey('nappies', state.nappies);
+        renderMain();
+      });
+    });
+  });
+  const qlND = document.getElementById('qlNappyDetails');
+  if(qlND) qlND.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  document.querySelectorAll('#nappyTypeSeg [data-nt]').forEach(b=>{
+    b.addEventListener('click', ()=>{ currentNappyType=b.dataset.nt; renderSheet(); });
+  });
+  const saveNappyDetailed = document.getElementById('saveNappyDetailed');
+  if(saveNappyDetailed) saveNappyDetailed.addEventListener('click', async ()=>{
+    const date = document.getElementById('nappyDateInput').value;
+    const note = document.getElementById('nappyNoteInput').value.trim();
+    if(!date){ toast('Pick a time'); return; }
+    state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note});
+    await saveKey('nappies', state.nappies);
+    await flashButtonSuccess('saveNappyDetailed', '✓ Logged'); closeSheet(); renderMain();
+  });
+
+  document.querySelectorAll('#qlFeedSubtypeSeg [data-fs]').forEach(b=>{
+    b.addEventListener('click', ()=>{ currentFeedSubtype=b.dataset.fs; sheetPumpForced=false; renderSheet(); });
+  });
+  const qlFeedAddDetails = document.getElementById('qlFeedAddDetails');
+  if(qlFeedAddDetails) qlFeedAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  const saveFeedBtn = document.getElementById('qlSaveFeed');
+  if(saveFeedBtn) saveFeedBtn.addEventListener('click', async ()=>{
+    const subtype = saveFeedBtn.dataset.subtype;
+    const date = document.getElementById('qlFeedDate').value;
+    const note = sheetShowDetails ? (document.getElementById('qlFeedNote')?.value.trim()||'') : '';
+    let entry = {id:uid(), type:subtype, date:new Date(date).toISOString(), note};
+    if(subtype==='breastfeeding'){
+      const left = parseFloat(document.getElementById('qlFeedLeft').value)||0;
+      const right = parseFloat(document.getElementById('qlFeedRight').value)||0;
+      if(left===0 && right===0){ toast('Enter a duration for at least one side'); return; }
+      entry.leftMins=left; entry.rightMins=right; entry.totalMins=left+right;
+      state.prefs = state.prefs||{};
+      state.prefs.lastBreastSide = (left>0 && right===0) ? 'Left' : (right>0 && left===0) ? 'Right' : 'Both';
+    } else if(subtype==='expressed' || subtype==='formula'){
+      entry.offeredMl = parseFloat(document.getElementById('qlFeedOffered').value)||0;
+      entry.consumedMl = parseFloat(document.getElementById('qlFeedConsumed').value)||0;
+    } else if(subtype==='pumping'){
+      entry.pumpLeftMl = parseFloat(document.getElementById('qlPumpLeft').value)||0;
+      entry.pumpRightMl = parseFloat(document.getElementById('qlPumpRight').value)||0;
+      entry.pumpTotalMl = entry.pumpLeftMl+entry.pumpRightMl;
+      entry.pumpDurationMin = parseFloat(document.getElementById('qlPumpDuration').value)||0;
+    }
+    state.prefs = state.prefs||{};
+    if(!sheetPumpForced) state.prefs.lastFeedType = subtype;
+    state.feeds.push(entry);
+    await saveKey('feeds', state.feeds);
+    await flashButtonSuccess('qlSaveFeed', '✓ Logged'); closeSheet(); renderMain();
+  });
+
+  document.querySelectorAll('#qlSleepTypeSeg [data-s]').forEach(b=>{
+    b.addEventListener('click', ()=>{ currentSleepType=b.dataset.s; renderSheet(); });
+  });
+  const saveSleepBtn = document.getElementById('qlSaveSleep');
+  if(saveSleepBtn) saveSleepBtn.addEventListener('click', async ()=>{
+    const mins = parseInt(document.getElementById('qlSleepMins').value);
+    const date = document.getElementById('qlSleepDate').value;
+    if(!mins){ toast('Enter a duration'); return; }
+    state.sleeps.push({id:uid(), date:new Date(date).toISOString(), label:currentSleepType, mins});
+    await saveKey('sleep', state.sleeps);
+    await flashButtonSuccess('qlSaveSleep', '✓ Logged'); closeSheet(); renderMain();
+  });
+
+  const qlTempAddDetails = document.getElementById('qlTempAddDetails');
+  if(qlTempAddDetails) qlTempAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  const saveTempBtn = document.getElementById('qlSaveTemp');
+  if(saveTempBtn) saveTempBtn.addEventListener('click', async ()=>{
+    const val = parseFloat(document.getElementById('qlTempVal').value);
+    const method = document.getElementById('qlTempMethod').value;
+    const date = document.getElementById('qlTempDate').value;
+    if(!val){ toast('Enter a temperature'); return; }
+    const note = sheetShowDetails ? (document.getElementById('qlTempNote')?.value.trim()||'') : '';
+    currentTempMethod = method;
+    state.prefs = state.prefs||{}; state.prefs.lastTempMethod = method;
+    state.temperatures.push({id:uid(), tempC:val, method, date:new Date(date).toISOString(), note});
+    await saveKey('temperatures', state.temperatures);
+    await flashButtonSuccess('qlSaveTemp', '✓ Logged'); closeSheet(); renderMain();
+  });
+
+  document.querySelectorAll('#qlMeasureTypeSeg [data-mt]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('#qlMeasureTypeSeg [data-mt]').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      const mt = b.dataset.mt;
+      document.getElementById('qlMeasureLabel').textContent = mt==='weight'?'Weight (kg)':mt==='length'?'Length (cm)':'Head circumference (cm)';
+      document.getElementById('qlSaveMeasure').dataset.mtype = mt;
+    });
+  });
+  const qlMeasureAddDetails = document.getElementById('qlMeasureAddDetails');
+  if(qlMeasureAddDetails) qlMeasureAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  const saveMeasureBtn = document.getElementById('qlSaveMeasure');
+  if(saveMeasureBtn) saveMeasureBtn.addEventListener('click', async ()=>{
+    const mtype = saveMeasureBtn.dataset.mtype || 'weight';
+    const val = parseFloat(document.getElementById('qlMeasureVal').value);
+    const date = document.getElementById('qlMeasureDate').value;
+    if(!val){ toast('Enter a value'); return; }
+    const note = sheetShowDetails ? (document.getElementById('qlMeasureNote')?.value.trim()||'') : '';
+    state.measurements.push({id:uid(), type:mtype, date:new Date(date).toISOString(), value:val, note});
+    await saveKey('measurements', state.measurements);
+    await flashButtonSuccess('qlSaveMeasure', '✓ Logged'); closeSheet(); renderMain();
+  });
+
+  const qlMomentAddDetails = document.getElementById('qlMomentAddDetails');
+  if(qlMomentAddDetails) qlMomentAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  const saveMomentBtn = document.getElementById('qlSaveMoment');
+  if(saveMomentBtn) saveMomentBtn.addEventListener('click', async ()=>{
+    const title = document.getElementById('qlMomentTitle').value.trim();
+    const date = document.getElementById('qlMomentDate').value;
+    if(!title){ toast('Enter what happened'); return; }
+    let photo=null, note='';
+    if(sheetShowDetails){
+      note = document.getElementById('qlMomentNote')?.value.trim()||'';
+      const fileInput = document.getElementById('qlMomentPhoto');
+      if(fileInput && fileInput.files && fileInput.files[0]){
+        try{ photo = await readAndCompressImage(fileInput.files[0], 640, 0.6); }
+        catch(e){ console.error(e); }
+      }
+    }
+    state.milestones.push({id:uid(), title, date:new Date(date).toISOString(), note, photo});
+    await saveKey('milestones', state.milestones);
+    await flashButtonSuccess('qlSaveMoment', '✓ Saved'); closeSheet(); renderMain();
+  });
+
+  const detailDel = document.getElementById('detailDeleteBtn');
+  if(detailDel) detailDel.addEventListener('click', async ()=>{
+    const m = DELETE_MAP[sheetDetailKind];
+    if(!m) return;
+    const idx = state[m.arr].findIndex(x=>x.id===sheetDetailId);
+    if(idx===-1) return;
+    const removed = state[m.arr][idx];
+    state[m.arr].splice(idx,1);
+    await saveKey(m.key, state[m.arr]);
+    closeSheet(); renderMain();
+    showUndoToast('Deleted', async ()=>{
+      state[m.arr].splice(idx,0,removed);
+      await saveKey(m.key, state[m.arr]);
+      renderMain();
+    });
+  });
+
+  const confirmRestoreBtn = document.getElementById('confirmRestoreBtn');
+  if(confirmRestoreBtn) confirmRestoreBtn.addEventListener('click', async ()=>{
+    if(!pendingRestoreData) return;
+    applyRemote(pendingRestoreData.appData);
+    try{ await firestorePatch(buildPayload()); lastSnapshotJSON = JSON.stringify(buildPayload()); }
+    catch(e){ console.error('restore sync failed', e); toast('Restored locally, but syncing failed — check your connection'); }
+    pendingRestoreData = null;
+    closeSheet();
+    currentView='home'; healthSubView=null;
+    render();
+    toast('✓ Backup restored');
+  });
+  const cancelRestoreBtn = document.getElementById('cancelRestoreBtn');
+  if(cancelRestoreBtn) cancelRestoreBtn.addEventListener('click', ()=>{ pendingRestoreData=null; closeSheet(); });
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function latestOf(type){ const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(b.date)-new Date(a.date)); return list[0]; }
+function labelType(t){ return t==='weight'?'Weight':t==='length'?'Length':'Head circ.'; }
+function unitFor(t){ return t==='weight'?' kg':' cm'; }
+function bandLabelFor(type, entry){
+  if(!entry) return '';
+  const m = ageMonthsDecimal(state.profile.birthDate, entry.date);
+  return BAND_LABELS[bandIndex(type, m, entry.value)];
+}
+
+/* ---------------- Today dashboard helpers ---------------- */
+function lastFeedInfo(){
+  const list = state.feeds.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!list.length) return null;
+  const nf = normalizeFeed(list[0]);
+  return { ago: timeAgo(nf.date), line: feedSummaryLine(list[0]) };
+}
+function lastSleepInfo(){
+  const list = state.sleeps.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!list.length) return null;
+  const s = list[0];
+  const end = new Date(new Date(s.date).getTime() + (s.mins||0)*60000);
+  return { line: `${s.label==='nap'?'☀️ Nap':'🌙 Night'} · Slept ${fmtDuration(s.mins)}`, sub: `Ended ${timeAgo(end.toISOString())}` };
+}
+function nappyCountsToday(){
+  const todayStr = sydDateKey();
+  const todays = state.nappies.filter(n=> sydDateKey(n.date)===todayStr);
+  let wet=0,dirty=0;
+  todays.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet++; if(n.type==='poo'||n.type==='both') dirty++; });
+  return {wet, dirty};
+}
+function nappyCounts24h(){
+  const cutoff = Date.now()-86400000;
+  const recent = state.nappies.filter(n=> new Date(n.date).getTime()>=cutoff);
+  let wet=0,dirty=0;
+  recent.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet++; if(n.type==='poo'||n.type==='both') dirty++; });
+  return {wet,dirty};
+}
+function weightSinceBirth(){
+  const list = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(!list.length) return null;
+  const first = list[0], latest = list[list.length-1];
+  return { latest: latest.value, diffKg: latest.value-first.value, onlyOne: first.id===latest.id };
+}
+function urgentTempBanner(){
+  const temps = state.temperatures.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const latest = temps[0];
+  if(!latest) return '';
+  const ageM = ageMonthsDecimal(state.profile.birthDate, latest.date);
+  const hoursAgo = (Date.now()-new Date(latest.date).getTime())/3600000;
+  if(ageM<3 && latest.tempC>=38.0 && hoursAgo<6){
+    return `<div class="urgent-banner"><div class="head">⚠️ Seek urgent medical assessment</div>A temperature of 38.0°C or higher in a baby under 3 months old should be assessed by a doctor promptly, rather than waiting to see how it develops. Logged ${timeAgo(latest.date)}.</div>`;
+  }
+  return '';
+}
+function buildTimelineEvents(){
+  const events = [];
+  state.feeds.forEach(f=>{ const nf=normalizeFeed(f); events.push({id:f.id, kind:'feed', date:nf.date, cat:'feeding', line: feedSummaryLine(f)}); });
+  state.nappies.forEach(n=>{ events.push({id:n.id, kind:'nappy', date:n.date, cat:'nappies', line: `${n.type==='wet'?'💧 Wet':n.type==='poo'?'💩 Poo':'💧💩 Wet + poo'} nappy${n.note?' · '+n.note:''}`}); });
+  state.sleeps.forEach(s=>{ events.push({id:s.id, kind:'sleep', date:s.date, cat:'sleep', line: `😴 ${s.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(s.mins)}`}); });
+  state.measurements.forEach(m=>{ events.push({id:m.id, kind:'measurement', date:m.date, cat:'growth', line: `${m.type==='weight'?'⚖️':m.type==='length'?'📏':'🧠'} ${labelType(m.type)} · ${m.value}${unitFor(m.type)}`}); });
+  state.vaccines.filter(v=>v.givenDate).forEach(v=>{ events.push({id:v.id, kind:'vaccine', date:v.givenDate, cat:'health', line: `💉 ${v.name} given`}); });
+  state.appointments.forEach(a=>{ events.push({id:a.id, kind:'appointment', date:a.date, cat:'health', line: `🩺 ${a.title}${a.status==='completed'?' (completed)':a.status==='cancelled'?' (cancelled)':''}`}); });
+  state.temperatures.forEach(t=>{ events.push({id:t.id, kind:'temperature', date:t.date, cat:'health', line: `🌡 ${t.tempC}°C${t.method?' · '+t.method:''}`}); });
+  state.healthRecords.forEach(r=>{ events.push({id:r.id, kind:'healthRecord', date:r.date, cat:'health', line: `${healthCatIcon(r.category)} ${r.title}`}); });
+  state.milestones.forEach(m=>{ events.push({id:m.id, kind:'milestone', date:m.date, cat:'moments', line: `⭐ ${m.title}`}); });
+  return events.sort((a,b)=> new Date(b.date)-new Date(a.date));
+}
+
+/* ---------------- Home (Today dashboard) ---------------- */
+function daysUntilLabel(dateISO){
+  const days = Math.round((new Date(dateISO)-new Date())/86400000);
+  if(days<0) return `${Math.abs(days)}d overdue`;
+  if(days===0) return 'Today';
+  if(days===1) return 'Tomorrow';
+  return `${days} days`;
+}
+function renderHome(){
+  const nar = growthNarrative('weight');
+  const proj = projectNextWeighIn();
+  const lastFeed = lastFeedInfo();
+  const ds = dailySummary();
+  const latestW = latestOf('weight');
+  const upcomingAppt = state.appointments.filter(a=>(a.status||'upcoming')==='upcoming' && new Date(a.date)>=new Date()).sort((a,b)=>new Date(a.date)-new Date(b.date))[0];
+  const dueVaccines = state.vaccines.filter(v=>!v.givenDate && !v.notApplicable && !v.hidden).sort((a,b)=>a.dueMonths-b.dueMonths).slice(0,1);
+  const recentEvents = buildTimelineEvents().slice(0,4);
+  const tempBanner = urgentTempBanner();
+
+  return `
+    ${tempBanner}
+    <div class="section-header">Last feed</div>
+    <div class="card">
+      ${lastFeed ? `
+        <div style="font-weight:800;font-size:15px;color:var(--ink);">${lastFeed.ago}</div>
+        <div class="support-text" style="margin-top:4px;">${lastFeed.line.replace(/^🍼\s*/,'')}</div>
+      ` : `<div class="support-text" style="margin-top:0;">Nothing logged yet.</div>`}
+      <button class="btn" id="logFeedBtn" style="margin-top:14px;">Log feed</button>
+    </div>
+
+    <div class="surface-group" style="padding:13px 16px;display:flex;justify-content:space-between;gap:6px;font-size:12.5px;font-weight:700;color:var(--ink);">
+      <span style="display:flex;align-items:center;gap:5px;">${icon('nappy',15)}${ds.nappies.wet} wet</span>
+      <span style="display:flex;align-items:center;gap:5px;">${icon('nappy',15)}${ds.nappies.dirty} dirty</span>
+      <span style="display:flex;align-items:center;gap:5px;">${icon('sleep',15)}${fmtDuration(ds.totalSleepMin)} sleep</span>
+    </div>
+
+    <div class="section-header">Today<span class="link" id="goTimelineLink">Full timeline →</span></div>
+    ${recentEvents.length ? recentEvents.map(e=>`
+      <div class="row-item"><div class="main" style="font-weight:600;">${e.line}</div><div class="meta-text">${new Date(e.date).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})}</div></div>
+    `).join('') : `<div class="empty">Nothing logged yet today.<br>Tap ＋ below to get started.</div>`}
+
+    ${(upcomingAppt || dueVaccines.length) ? `
+    <div class="section-header">Coming up</div>
+    ${upcomingAppt ? `<div class="row-item"><div class="main" style="font-weight:600;display:flex;align-items:center;gap:7px;">${icon('calendar',15)}${escapeHtml(upcomingAppt.title)}</div><div class="meta-text">${daysUntilLabel(upcomingAppt.date)}</div></div>` : ''}
+    ${dueVaccines.map(v=>`<div class="row-item"><div class="main" style="font-weight:600;display:flex;align-items:center;gap:7px;">${icon('shield',15)}${escapeHtml(v.name)}</div><div class="meta-text">Due around ${v.dueMonths} mo</div></div>`).join('')}
+    ` : ''}
+
+    ${latestW ? `
+    <div class="section-header">Growth<span class="link" id="goGrowthLink">View chart →</span></div>
+    <div class="card">
+      <div class="hero-metric">${latestW.value} <span style="font-size:16px;font-weight:700;">kg</span></div>
+      ${nar ? `<div class="secondary-metric">${nar.verdict}</div>` : ''}
+      ${proj ? `<div class="support-text">Next weigh-in ${fmtDate(proj.nextDate)} · target ≈ ${proj.idealVal.toFixed(2)} kg</div>` : ''}
+    </div>` : ''}
+
+    <div class="section-header">Care</div>
+    <div class="row-item" id="careRowLink" style="cursor:pointer;">
+      <div class="main" style="font-weight:600;">Feeding, sleep &amp; nappies</div>
+      <div class="meta-text">Summaries &amp; insights →</div>
+    </div>
+  `;
+}
+function bindHome(){
+  const lfb = document.getElementById('logFeedBtn');
+  if(lfb) lfb.addEventListener('click', ()=> openSheet('feed'));
+  const gtl = document.getElementById('goTimelineLink');
+  if(gtl) gtl.addEventListener('click', ()=>{ currentView='timeline'; render(); });
+  const ggl = document.getElementById('goGrowthLink');
+  if(ggl) ggl.addEventListener('click', ()=>{ currentView='growth'; render(); });
+  const gcl = document.getElementById('careRowLink');
+  if(gcl) gcl.addEventListener('click', ()=>{ currentView='care'; render(); });
+}
+
+/* ---------------- Add (unified quick-log hub) ---------------- */
+const ADD_TYPES = [
+  {key:'feed', label:'🍼 Feed'},
+  {key:'nappy', label:'🧷 Nappy'},
+  {key:'sleep', label:'😴 Sleep'},
+  {key:'weight', label:'⚖️ Weight'},
+  {key:'length', label:'📏 Length'},
+  {key:'hc', label:'🧠 Head'},
+  {key:'temp', label:'🌡️ Temp'},
+  {key:'healthnote', label:'📋 Health'},
+  {key:'moment', label:'⭐ Moment'}
+];
+function renderAdd(){
+  const chips = ADD_TYPES.map(t=>`<button data-at="${t.key}" class="${currentAddType===t.key?'active':''}">${t.label}</button>`).join('');
+  return `
+    <div class="hero"><h1>Add entry ✏️</h1><p>Pick a type — logging takes one or two taps.</p></div>
+    <div class="card">
+      <div class="tabs" id="addTypeTabs">${chips}</div>
+      <div id="addFormWrap">${renderAddForm(currentAddType)}</div>
+    </div>
+  `;
+}
+function renderAddForm(type){
+  if(type==='feed') return renderFeedForm();
+  if(type==='nappy') return renderNappyForm();
+  if(type==='sleep') return renderSleepForm();
+  if(type==='weight'||type==='length'||type==='hc') return renderMeasureForm(type);
+  if(type==='temp') return renderTempAddForm();
+  if(type==='healthnote') return renderHealthAddForm();
+  if(type==='moment') return renderMomentForm();
+  return '';
+}
+function renderTempAddForm(){
+  return `
+    <div class="fieldrow">
+      <div><label>Temperature (°C)</label><input type="number" step="0.1" inputmode="decimal" id="tempVal" placeholder="37.1"></div>
+      <div><label>Method</label><select id="tempMethod">
+        <option value="axillary" ${currentTempMethod==='axillary'?'selected':''}>Axillary</option>
+        <option value="rectal" ${currentTempMethod==='rectal'?'selected':''}>Rectal</option>
+        <option value="ear" ${currentTempMethod==='ear'?'selected':''}>Ear</option>
+        <option value="forehead" ${currentTempMethod==='forehead'?'selected':''}>Forehead</option>
+        <option value="other" ${currentTempMethod==='other'?'selected':''}>Other</option>
+      </select></div>
+    </div>
+    <label>Time</label><input type="datetime-local" id="tempDate" value="${todayInput()}">
+    <label>Note (optional)</label><input type="text" id="tempNote" placeholder="optional">
+    <button class="btn secondary" id="saveTempBtn">Log temperature</button>
+  `;
+}
+function renderHealthAddForm(){
+  const cats = [{k:'symptom',l:'Symptom / illness'},{k:'medication',l:'Medication'},{k:'advice',l:'Doctor advice'},{k:'note',l:'Health note'},{k:'other',l:'Other'}];
+  return `
+    <label>Category</label>
+    <select id="healthCatSelect">${cats.map(c=>`<option value="${c.k}" ${currentHealthCat===c.k?'selected':''}>${c.l}</option>`).join('')}</select>
+    <label>Title</label><input type="text" id="healthTitle" placeholder="e.g. Runny nose">
+    <label>Time</label><input type="datetime-local" id="healthDate" value="${todayInput()}">
+    <label>Details (optional)</label><textarea id="healthDetails" rows="2" placeholder="optional"></textarea>
+    <button class="btn" id="saveHealthBtn">Save record</button>
+  `;
+}
+function renderFeedForm(){
+  const subs = [
+    {key:'breastfeeding', label:'Breast'},
+    {key:'expressed', label:'Expressed'},
+    {key:'formula', label:'Formula'},
+    {key:'pumping', label:'Pump'}
+  ];
+  const segHtml = subs.map(s=>`<button data-fs="${s.key}" class="${currentFeedSubtype===s.key?'active':''}">${s.label}</button>`).join('');
+  let fields = '';
+  if(currentFeedSubtype==='breastfeeding'){
+    const lastSideNote = state.prefs && state.prefs.lastBreastSide ? `<div class="note">Last breast used: <b>${state.prefs.lastBreastSide}</b></div>` : '';
+    fields = `
+      <div class="fieldrow">
+        <div><label>Left (min)</label><input type="number" inputmode="numeric" id="feedLeft" placeholder="0"></div>
+        <div><label>Right (min)</label><input type="number" inputmode="numeric" id="feedRight" placeholder="0"></div>
+      </div>
+      ${lastSideNote}
+      <label>Time</label>
+      <input type="datetime-local" id="feedDate" value="${todayInput()}">
+      <label>Note (optional)</label>
+      <input type="text" id="feedNote" placeholder="optional">
+    `;
+  } else if(currentFeedSubtype==='expressed' || currentFeedSubtype==='formula'){
+    fields = `
+      <div class="fieldrow">
+        <div><label>Offered (mL)</label><input type="number" inputmode="numeric" id="feedOffered" placeholder="90"></div>
+        <div><label>Consumed (mL)</label><input type="number" inputmode="numeric" id="feedConsumed" placeholder="90"></div>
+      </div>
+      <label>Time</label>
+      <input type="datetime-local" id="feedDate" value="${todayInput()}">
+      <label>Note (optional)</label>
+      <input type="text" id="feedNote" placeholder="optional">
+    `;
+  } else if(currentFeedSubtype==='pumping'){
+    fields = `
+      <div class="fieldrow">
+        <div><label>Left (mL)</label><input type="number" inputmode="numeric" id="pumpLeft" placeholder="0"></div>
+        <div><label>Right (mL)</label><input type="number" inputmode="numeric" id="pumpRight" placeholder="0"></div>
+      </div>
+      <label>Duration (min)</label>
+      <input type="number" inputmode="numeric" id="pumpDuration" placeholder="15">
+      <label>Time</label>
+      <input type="datetime-local" id="feedDate" value="${todayInput()}">
+      <label>Note (optional)</label>
+      <input type="text" id="feedNote" placeholder="optional">
+    `;
+  }
+  return `
+    <label>Feed type</label>
+    <div class="seg" id="feedSubtypeSeg">${segHtml}</div>
+    ${fields}
+    <button class="btn" id="saveFeedBtn">Save feed</button>
+  `;
+}
+function renderNappyForm(){
+  const types = [{k:'wet',l:'💧 Wet'},{k:'poo',l:'💩 Poo'},{k:'both',l:'💧💩 Both'}];
+  return `
+    <label>Type</label>
+    <div class="seg" id="nappyTypeSeg">${types.map(t=>`<button data-nt="${t.k}" class="${currentNappyType===t.k?'active':''}">${t.l}</button>`).join('')}</div>
+    <label>Time</label>
+    <input type="datetime-local" id="nappyDate" value="${todayInput()}">
+    <label>Note (optional)</label>
+    <input type="text" id="nappyNote" placeholder="optional">
+    <button class="btn secondary" id="saveNappyBtn">Log nappy</button>
+  `;
+}
+function renderSleepForm(){
+  return `
+    <label>Type</label>
+    <div class="seg" id="sleepTypeSeg">
+      <button data-s="nap" class="${currentSleepType==='nap'?'active':''}">Nap</button>
+      <button data-s="night" class="${currentSleepType==='night'?'active':''}">Night</button>
+    </div>
+    <label>Duration (minutes)</label>
+    <input type="number" inputmode="numeric" id="sleepMins" placeholder="90">
+    <label>Time started</label>
+    <input type="datetime-local" id="sleepDate" value="${todayInput()}">
+    <button class="btn secondary" id="saveSleepBtn">Save sleep</button>
+  `;
+}
+function renderMeasureForm(type){
+  return `
+    <label>Date &amp; time</label>
+    <input type="datetime-local" id="mDate" value="${todayInput()}">
+    <label>Value (${type==='weight'?'kg':'cm'})</label>
+    <input type="number" step="0.01" inputmode="decimal" id="mVal" placeholder="e.g. ${type==='weight'?'3.65':'52.5'}">
+    <label>Note (optional)</label>
+    <input type="text" id="mNote" placeholder="e.g. after feed, at checkup">
+    <button class="btn" id="saveMeasureBtn">Save measurement</button>
+  `;
+}
+function renderMomentForm(){
+  return `
+    <label>What happened</label>
+    <input type="text" id="momTitle" placeholder="e.g. First smile">
+    <label>Date</label>
+    <input type="date" id="momDate" value="${todayDateInput()}">
+    <label>Photo (optional)</label>
+    <input type="file" accept="image/*" id="momPhoto">
+    <label>Note (optional)</label>
+    <textarea id="momNote" rows="2" placeholder="Any detail worth keeping"></textarea>
+    <button class="btn" id="saveMomentBtn">Save moment</button>
+  `;
+}
+function bindAdd(){
+  document.querySelectorAll('#addTypeTabs [data-at]').forEach(b=>{
+    b.addEventListener('click', ()=>{ currentAddType=b.dataset.at; renderMain(); });
+  });
+  const type = currentAddType;
+  if(type==='feed'){
+    document.querySelectorAll('#feedSubtypeSeg [data-fs]').forEach(b=>{
+      b.addEventListener('click', ()=>{ currentFeedSubtype=b.dataset.fs; renderMain(); });
+    });
+    document.getElementById('saveFeedBtn').addEventListener('click', async ()=>{
+      const date = document.getElementById('feedDate').value;
+      if(!date){ toast('Pick a time'); return; }
+      const note = document.getElementById('feedNote').value.trim();
+      let entry = {id:uid(), type:currentFeedSubtype, date:new Date(date).toISOString(), note};
+      if(currentFeedSubtype==='breastfeeding'){
+        const left = parseFloat(document.getElementById('feedLeft').value)||0;
+        const right = parseFloat(document.getElementById('feedRight').value)||0;
+        if(left===0 && right===0){ toast('Enter a duration for at least one side'); return; }
+        entry.leftMins=left; entry.rightMins=right; entry.totalMins=left+right;
+        state.prefs = state.prefs||{};
+        if(left>0 && right===0) state.prefs.lastBreastSide='Left';
+        else if(right>0 && left===0) state.prefs.lastBreastSide='Right';
+        else state.prefs.lastBreastSide='Both';
+      } else if(currentFeedSubtype==='expressed' || currentFeedSubtype==='formula'){
+        entry.offeredMl = parseFloat(document.getElementById('feedOffered').value)||0;
+        entry.consumedMl = parseFloat(document.getElementById('feedConsumed').value)||0;
+      } else if(currentFeedSubtype==='pumping'){
+        entry.pumpLeftMl = parseFloat(document.getElementById('pumpLeft').value)||0;
+        entry.pumpRightMl = parseFloat(document.getElementById('pumpRight').value)||0;
+        entry.pumpTotalMl = entry.pumpLeftMl+entry.pumpRightMl;
+        entry.pumpDurationMin = parseFloat(document.getElementById('pumpDuration').value)||0;
+      }
+      state.prefs = state.prefs||{}; state.prefs.lastFeedType = currentFeedSubtype;
+      state.feeds.push(entry);
+      await saveKey('feeds', state.feeds);
+      toast('Feed logged 🍼'); currentView='home'; render();
+    });
+  } else if(type==='nappy'){
+    document.querySelectorAll('#nappyTypeSeg [data-nt]').forEach(b=>{
+      b.addEventListener('click', ()=>{ currentNappyType=b.dataset.nt; renderMain(); });
+    });
+    document.getElementById('saveNappyBtn').addEventListener('click', async ()=>{
+      const date = document.getElementById('nappyDate').value;
+      if(!date){ toast('Pick a time'); return; }
+      const note = document.getElementById('nappyNote').value.trim();
+      state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note});
+      await saveKey('nappies', state.nappies);
+      toast('Nappy logged 🧷'); currentView='home'; render();
+    });
+  } else if(type==='sleep'){
+    document.querySelectorAll('#sleepTypeSeg [data-s]').forEach(b=>{
+      b.addEventListener('click', ()=>{ currentSleepType=b.dataset.s; renderMain(); });
+    });
+    document.getElementById('saveSleepBtn').addEventListener('click', async ()=>{
+      const mins = parseInt(document.getElementById('sleepMins').value);
+      const date = document.getElementById('sleepDate').value;
+      if(!mins || !date){ toast('Enter duration and time'); return; }
+      state.sleeps.push({id:uid(), date:new Date(date).toISOString(), label:currentSleepType, mins});
+      await saveKey('sleep', state.sleeps);
+      toast('Sleep logged 😴'); currentView='home'; render();
+    });
+  } else if(type==='weight'||type==='length'||type==='hc'){
+    document.getElementById('saveMeasureBtn').addEventListener('click', async ()=>{
+      const val = parseFloat(document.getElementById('mVal').value);
+      const date = document.getElementById('mDate').value;
+      const note = document.getElementById('mNote').value.trim();
+      if(!val || !date){ toast('Enter a date and value'); return; }
+      state.measurements.push({id:uid(), type, date:new Date(date).toISOString(), value:val, note});
+      await saveKey('measurements', state.measurements);
+      toast('Saved 🌱'); currentView='home'; render();
+    });
+  } else if(type==='temp'){
+    document.getElementById('saveTempBtn').addEventListener('click', async ()=>{
+      const val = parseFloat(document.getElementById('tempVal').value);
+      const date = document.getElementById('tempDate').value;
+      const method = document.getElementById('tempMethod').value;
+      const note = document.getElementById('tempNote').value.trim();
+      if(!val || !date){ toast('Enter a temperature and time'); return; }
+      currentTempMethod = method;
+      state.prefs = state.prefs||{}; state.prefs.lastTempMethod = method;
+      state.temperatures.push({id:uid(), tempC:val, method, date:new Date(date).toISOString(), note});
+      await saveKey('temperatures', state.temperatures);
+      toast('Temperature logged 🌡️'); currentView='home'; render();
+    });
+  } else if(type==='healthnote'){
+    document.getElementById('saveHealthBtn').addEventListener('click', async ()=>{
+      const cat = document.getElementById('healthCatSelect').value;
+      const title = document.getElementById('healthTitle').value.trim();
+      const date = document.getElementById('healthDate').value;
+      const details = document.getElementById('healthDetails').value.trim();
+      if(!title || !date){ toast('Enter a title and time'); return; }
+      currentHealthCat = cat;
+      state.prefs = state.prefs||{}; state.prefs.lastHealthCat = cat;
+      state.healthRecords.push({id:uid(), category:cat, title, date:new Date(date).toISOString(), details});
+      await saveKey('healthRecords', state.healthRecords);
+      toast('Health record saved 📋'); currentView='home'; render();
+    });
+  } else if(type==='moment'){
+    document.getElementById('saveMomentBtn').addEventListener('click', async ()=>{
+      const title = document.getElementById('momTitle').value.trim();
+      const date = document.getElementById('momDate').value;
+      const note = document.getElementById('momNote').value.trim();
+      if(!title || !date){ toast('Enter a title and date'); return; }
+      let photo = null;
+      const fileInput = document.getElementById('momPhoto');
+      if(fileInput.files && fileInput.files[0]){
+        try{ photo = await readAndCompressImage(fileInput.files[0], 640, 0.6); }
+        catch(e){ console.error('photo processing failed', e); toast('Could not process photo — saved without it'); }
+      }
+      state.milestones.push({id:uid(), title, date:new Date(date).toISOString(), note, photo});
+      await saveKey('milestones', state.milestones);
+      toast('Moment saved ⭐'); currentView='home'; render();
+    });
+  }
+}
+
+/* ---------------- Growth insights: velocity + percentile trend ---------------- */
+function growthVelocity(type){
+  const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(list.length<2) return null;
+  const a = list[list.length-2], b = list[list.length-1];
+  const days = (new Date(b.date)-new Date(a.date))/86400000;
+  if(days<=0) return null;
+  const diff = b.value-a.value;
+  return { diff, perWeek: diff/days*7, days };
+}
+function percentileTrendSVG(points){
+  if(points.length<2) return '';
+  const W=400,H=90,padL=28,padR=10,padT=10,padB=18;
+  const dark = isDarkMode();
+  const gridColor = dark ? '#3D3544' : '#EDE3F2';
+  const textColor = dark ? '#9A8FAA' : '#8B7E93';
+  const lineColor = dark ? '#A3D8C6' : '#8FCDBB';
+  const dotColor = dark ? '#6FBBA3' : '#4F9E8B';
+  const minM = points[0].m, maxM = points[points.length-1].m;
+  const spanM = Math.max(0.1, maxM-minM);
+  const x = m => padL + ((m-minM)/spanM)*(W-padL-padR);
+  const y = s => padT + (1-((s)/100))*(H-padT-padB);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:hidden" font-family="IBM Plex Mono, monospace">`;
+  [3,15,50,85,97].forEach(v=>{
+    const yy=y(v);
+    svg += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W-padR}" y2="${yy.toFixed(1)}" stroke="${gridColor}" stroke-width="1"/>`;
+    svg += `<text x="1" y="${(yy+3).toFixed(1)}" font-size="8" fill="${textColor}">${v}</text>`;
+  });
+  const clamp = s => Math.max(0,Math.min(100,s));
+  const dPath = points.map((p,i)=> (i===0?'M':'L') + x(p.m).toFixed(1) + ',' + y(clamp(p.score)).toFixed(1)).join(' ');
+  svg += `<path d="${dPath}" fill="none" stroke="${lineColor}" stroke-width="2.5"/>`;
+  points.forEach(p=>{
+    svg += `<circle cx="${x(p.m).toFixed(1)}" cy="${y(clamp(p.score)).toFixed(1)}" r="3.5" fill="${dotColor}"/>`;
+  });
+  svg += `</svg>`;
+  return svg;
+}
+
+/* ---------------- Growth ---------------- */
+function renderSinceBirthCard(type){
+  const gsb = growthSinceBirth(type);
+  const trend = growthTrend(type);
+  const unit = unitFor(type);
+  let chainHtml = '';
+  if(gsb){
+    const parts = [`Birth: ${gsb.birth.value}${unit} · ${fmtDate(gsb.birth.date)}`];
+    if(gsb.hasDip){
+      parts.push(`Lowest: ${gsb.lowest.value}${unit} · ${fmtDate(gsb.lowest.date)}`);
+      parts.push(gsb.regained ? `Regained by ${fmtDate(gsb.regained.date)}` : 'Not yet regained');
+    }
+    parts.push(`Latest: ${gsb.latest.value}${unit} · ${fmtDate(gsb.latest.date)}`);
+    chainHtml = `<div class="note" style="font-size:12.5px;line-height:1.9;">${parts.join(' → ')}</div>`;
+  }
+  let trendHtml;
+  if(trend.insufficient){
+    trendHtml = `<div class="empty">Not enough measurements for a reliable trend yet.</div>`;
+  } else {
+    const diffLbl = `${trend.diffSinceBirth>=0?'+':''}${trend.diffSinceBirth.toFixed(2)}${unit}`;
+    const pctLbl = trend.pctSinceBirth!=null ? `${trend.pctSinceBirth>=0?'+':''}${trend.pctSinceBirth.toFixed(1)}%` : '—';
+    const perDayLbl = trend.perDay!=null ? (type==='weight' ? `${trend.perDay>=0?'+':''}${(trend.perDay*1000).toFixed(1)} g/day` : `${trend.perDay>=0?'+':''}${trend.perDay.toFixed(3)} ${unit.trim()}/day`) : '—';
+    trendHtml = `
+      <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat"><span class="val">${diffLbl}</span><span class="lbl">Since birth</span></div>
+        <div class="stat"><span class="val">${pctLbl}</span><span class="lbl">% from birth</span></div>
+      </div>
+      <div class="note" style="margin-top:10px;">${trend.diffSincePrev>=0?'+':''}${trend.diffSincePrev.toFixed(2)}${unit} since previous measurement (${Math.round(trend.daysSincePrev)}d ago) · ${perDayLbl} average, based on ${Math.round(trend.daysSinceBirth)} days between first and latest measurements.</div>
+    `;
+  }
+  return `<div class="card"><h2>📐 Since birth</h2>${chainHtml || `<div class="empty">Log at least two measurements to see her growth since birth.</div>`}${trendHtml}</div>`;
+}
+function renderGrowth(){
+  const tableKey = TYPE_TO_TABLE[currentGrowthTab];
+  const pts = state.measurements.filter(m=>m.type===currentGrowthTab)
+    .map(m=>{
+      const ageM = ageMonthsDecimal(state.profile.birthDate, m.date);
+      const row = interpolateRow(tableKey, ageM);
+      return { m: ageM, v: m.value, score: percentileScore(row, m.value), date: m.date, id: m.id };
+    })
+    .sort((a,b)=>a.m-b.m);
+  const currentAgeM = ageMonthsDecimal(state.profile.birthDate, new Date().toISOString());
+  const zoomWindow = Math.min(24, Math.max(3, Math.ceil(currentAgeM)+2));
+  const activeWindow = growthZoomed ? zoomWindow : 24;
+  const svg = buildChartSVG(tableKey, pts, activeWindow);
+  const nar = growthNarrative(currentGrowthTab);
+  const trend = growthTrend(currentGrowthTab);
+  const trendSvg = percentileTrendSVG(pts);
+  const corrected = correctedAgeInfo();
+  const latest = pts[pts.length-1];
+  const activePt = (chartActivePointIdx!=null && chartPointsCache[chartActivePointIdx]) ? chartPointsCache[chartActivePointIdx] : null;
+  const first = pts[0];
+  const sinceBirthLine = (latest && first && latest.id!==first.id)
+    ? (currentGrowthTab==='weight'
+        ? `${(latest.v-first.v)>=0?'+':''}${Math.round((latest.v-first.v)*1000)} g since birth`
+        : `${(latest.v-first.v)>=0?'+':''}${(latest.v-first.v).toFixed(1)} cm since birth`)
+    : null;
+  /* Tooltip stats for a selected point */
+  let activeDetail = null;
+  if(activePt){
+    const fromBirth = first && activePt.id!==first.id ? activePt.v-first.v : null;
+    const daysFromBirth = first ? (new Date(activePt.date)-new Date(first.date))/86400000 : 0;
+    const perDay = (fromBirth!=null && daysFromBirth>0) ? fromBirth/daysFromBirth : null;
+    activeDetail = { fromBirth, perDay };
+  }
+  return `
+    <div class="hero" style="margin:2px 0 10px;"><h1>Growth</h1>${corrected && !corrected.notYetTermEquivalent ? `<p>Chronological ${ageLabelShort(state.profile.birthDate)} · Corrected ${corrected.label}</p>` : ''}</div>
+    <div class="segctl" id="growthSeg" role="tablist" aria-label="Measurement type">
+      <button data-g="weight" role="tab" aria-selected="${currentGrowthTab==='weight'}" class="${currentGrowthTab==='weight'?'active':''}">Weight</button>
+      <button data-g="length" role="tab" aria-selected="${currentGrowthTab==='length'}" class="${currentGrowthTab==='length'?'active':''}">Length</button>
+      <button data-g="hc" role="tab" aria-selected="${currentGrowthTab==='hc'}" class="${currentGrowthTab==='hc'?'active':''}">Head</button>
+    </div>
+
+    ${latest ? `
+    <div class="hero-metric" style="font-size:34px;">${latest.v}<span style="font-size:15px;font-weight:700;"> ${unitFor(currentGrowthTab).trim()}</span></div>
+    <div class="secondary-metric" style="margin-top:3px;">${ordinalSuffix(Math.round(latest.score))} percentile</div>
+    ${sinceBirthLine ? `<div class="meta-text" style="font-size:12px;margin-top:3px;">${sinceBirthLine}</div>` : ''}
+    ` : `<div class="empty">No ${labelType(currentGrowthTab).toLowerCase()} logged yet — tap + Log to add one.</div>`}
+
+    <div style="margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;">
+        <div class="legend" style="margin-top:0;"><span><i style="background:${isDarkMode()?'#F2A796':'#EC9384'}"></i>${escapeHtml(state.profile.name)}</span><span style="color:var(--ink-tertiary);">WHO reference</span></div>
+        <div style="display:flex;gap:2px;">
+          <button id="toggleWhoCurves" style="border:none;background:none;font-size:11px;font-weight:700;color:var(--ink-soft);cursor:pointer;padding:4px;">${showWhoCurves ? 'Hide WHO curves' : 'WHO curves'}</button>
+          <button id="zoomToggle" style="border:none;background:none;font-size:11px;font-weight:700;color:var(--ink-soft);cursor:pointer;padding:4px;">${growthZoomed ? 'Full 24mo' : 'Zoom to age'}</button>
+        </div>
+      </div>
+      <div id="chartWrap">${svg}</div>
+    </div>
+    ${activePt ? `
+    <div class="chart-tooltip">
+      <div style="font-size:11.5px;font-weight:700;color:var(--ink-soft);">${fmtDate(activePt.date)} · ${momentAgeLabel(activePt.date)}</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:19px;font-weight:600;color:var(--ink);margin-top:3px;">${activePt.v}${unitFor(currentGrowthTab)}</div>
+      <div style="font-size:12px;font-weight:700;color:var(--lavender-deep);margin-top:2px;">${ordinalSuffix(Math.round(activePt.score))} percentile</div>
+      ${activeDetail && activeDetail.fromBirth!=null ? `<div class="meta-text" style="margin-top:4px;">${currentGrowthTab==='weight' ? `${activeDetail.fromBirth>=0?'+':''}${Math.round(activeDetail.fromBirth*1000)} g from birth${activeDetail.perDay!=null?` · ${activeDetail.perDay>=0?'+':''}${(activeDetail.perDay*1000).toFixed(1)} g/day`:''}` : `${activeDetail.fromBirth>=0?'+':''}${activeDetail.fromBirth.toFixed(1)} cm from birth`}</div>` : ''}
+    </div>` : ''}
+
+    ${trend && !trend.insufficient ? `
+    <div class="stat-row">
+      <div class="stat-cell">
+        <div class="stat-val">${trend.perDay!=null ? (currentGrowthTab==='weight' ? `${trend.perDay>=0?'+':''}${(trend.perDay*1000).toFixed(1)} g/day` : `${trend.perDay>=0?'+':''}${trend.perDay.toFixed(2)} cm/day`) : '—'}</div>
+        <div class="stat-lbl">Average gain</div>
+      </div>
+      <div class="stat-div"></div>
+      <div class="stat-cell">
+        <div class="stat-val">${trend.pctSinceBirth!=null ? `${trend.pctSinceBirth>=0?'+':''}${trend.pctSinceBirth.toFixed(1)}%` : '—'}</div>
+        <div class="stat-lbl">Since birth</div>
+      </div>
+    </div>` : (latest ? `<div class="meta-text" style="margin-top:12px;">Not enough measurements for a reliable trend yet.</div>` : '')}
+
+    <div class="disclosure-row" id="toggleExplain" role="button" tabindex="0" aria-expanded="${growthExplainOpen}">
+      <span style="display:flex;align-items:center;gap:8px;">ⓘ About this trend</span>
+      <span style="transform:rotate(${growthExplainOpen?90:0}deg);transition:transform var(--motion-base) var(--ease);display:inline-flex;">›</span>
+    </div>
+    ${growthExplainOpen ? `
+      ${nar ? `<div class="narrative">${nar.msg}</div>` : ''}
+      ${renderSinceBirthCard(currentGrowthTab)}
+      ${pts.length>=2 ? `
+      <div class="card">
+        <h2>Percentile trend</h2>
+        ${trendSvg}
+        <div class="note">This plots her percentile position itself over time, separate from the raw number. A flat line means she's tracking steadily along her curve; a rising or falling line means she's crossing percentiles — worth a mention at her next checkup either way.</div>
+      </div>` : ''}
+      <div class="note">This is a general reference, not a medical assessment — always check in with your pediatrician about anything that concerns you.</div>
+    ` : ''}
+
+    <div class="section-header">All entries</div>
+    ${renderMeasurementList(currentGrowthTab)}
+  `;
+}
+function renderMeasurementList(type){
+  const tableKey = TYPE_TO_TABLE[type];
+  const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(!list.length) return `<div class="empty">Nothing logged yet.</div>`;
+  return list.map(m=>{
+    const ageM = ageMonthsDecimal(state.profile.birthDate, m.date);
+    const score = Math.round(percentileScore(interpolateRow(tableKey, ageM), m.value));
+    return `
+    <div class="row-item">
+      <div><div class="main">${m.value}${unitFor(type)} <span style="color:#4F9E8B;font-weight:700;font-size:11px;">~${score}th pct</span></div><div class="sub">${fmtDate(m.date)}${m.note?' · '+escapeHtml(m.note):''}</div></div>
+      <button class="del" data-id="${m.id}" data-kind="measurement">•••</button>
+    </div>`;
+  }).join('');
+}
+function bindGrowth(){
+  document.querySelectorAll('#growthSeg [data-g]').forEach(b=>{ b.addEventListener('click', ()=>{ currentGrowthTab=b.dataset.g; chartActivePointIdx=null; renderMain(); }); });
+  const zt = document.getElementById('zoomToggle');
+  if(zt) zt.addEventListener('click', ()=>{ growthZoomed = !growthZoomed; renderMain(); });
+  const te = document.getElementById('toggleExplain');
+  if(te){
+    const toggle = ()=>{ growthExplainOpen = !growthExplainOpen; renderMain(); };
+    te.addEventListener('click', toggle);
+    te.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' '){ e.preventDefault(); toggle(); } });
+  }
+  const wc = document.getElementById('toggleWhoCurves');
+  if(wc) wc.addEventListener('click', ()=>{ showWhoCurves = !showWhoCurves; renderMain(); });
+  document.querySelectorAll('.chart-pt').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const idx = parseInt(el.dataset.idx);
+      chartActivePointIdx = chartActivePointIdx===idx ? null : idx;
+      renderMain();
+    });
+  });
+  /* Tap anywhere outside the chart dismisses the selected point */
+  if(chartActivePointIdx!=null){
+    const main = document.getElementById('main');
+    if(main){
+      main.addEventListener('click', (e)=>{
+        if(!e.target.closest('#chartWrap') && !e.target.closest('.chart-tooltip')){
+          chartActivePointIdx = null;
+          renderMain();
+        }
+      }, {once:true});
+    }
+  }
+  bindDeletes();
+}
+
+/* ---------------- Care (history + summaries) ---------------- */
+/* ---------------- Daily / weekly summaries & pattern insights ---------------- */
+function dailySummary(dateRef){
+  dateRef = dateRef || new Date();
+  const dayStr = sydDateKey(dateRef);
+  const feedsToday = state.feeds.map(normalizeFeed).filter(f=> sydDateKey(f.date)===dayStr);
+  const breastfeeds = feedsToday.filter(f=>f.type==='breastfeeding');
+  const totalNursingMin = breastfeeds.reduce((s,f)=>s+(f.totalMins||0),0);
+  const feedTimes = feedsToday.map(f=>new Date(f.date).getTime()).sort((a,b)=>a-b);
+  let avgIntervalMin = null;
+  if(feedTimes.length>=2){
+    let gap=0; for(let i=1;i<feedTimes.length;i++) gap += feedTimes[i]-feedTimes[i-1];
+    avgIntervalMin = (gap/(feedTimes.length-1))/60000;
+  }
+  const sleepsToday = state.sleeps.filter(s=> sydDateKey(s.date)===dayStr);
+  const totalSleepMin = sleepsToday.reduce((s,x)=>s+(x.mins||0),0);
+  const longestSleep = sleepsToday.reduce((mx,x)=>Math.max(mx,x.mins||0),0);
+  const growthToday = state.measurements.filter(m=> sydDateKey(m.date)===dayStr);
+  return {
+    dayLabel: dateRef.toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ}),
+    feedCount: feedsToday.length, totalNursingMin, avgIntervalMin,
+    totalSleepMin, sleepPeriods: sleepsToday.length, longestSleep,
+    nappies: nappyCountsToday(), growthToday
+  };
+}
+function weeklySummary(){
+  const cutoff = Date.now()-7*86400000;
+  const feeds7 = state.feeds.map(normalizeFeed).filter(f=> new Date(f.date).getTime()>=cutoff);
+  const breastfeeds7 = feeds7.filter(f=>f.type==='breastfeeding');
+  const totalNursingMin7 = breastfeeds7.reduce((s,f)=>s+(f.totalMins||0),0);
+  const expressedMl7 = feeds7.filter(f=>f.type==='expressed').reduce((s,f)=>s+(f.consumedMl||0),0);
+  const formulaMl7 = feeds7.filter(f=>f.type==='formula').reduce((s,f)=>s+(f.consumedMl||0),0);
+  const pumpingMl7 = feeds7.filter(f=>f.type==='pumping').reduce((s,f)=>s+(f.pumpTotalMl||0),0);
+  const feedTimes7 = feeds7.map(f=>new Date(f.date).getTime()).sort((a,b)=>a-b);
+  let avgInterval7=null;
+  if(feedTimes7.length>=2){ let g=0; for(let i=1;i<feedTimes7.length;i++) g+=feedTimes7[i]-feedTimes7[i-1]; avgInterval7=(g/(feedTimes7.length-1))/60000; }
+  const sleeps7 = state.sleeps.filter(s=> new Date(s.date).getTime()>=cutoff);
+  const totalSleepMin7 = sleeps7.reduce((s,x)=>s+(x.mins||0),0);
+  const longestSleep7 = sleeps7.reduce((mx,x)=>Math.max(mx,x.mins||0),0);
+  const nappies7 = state.nappies.filter(n=> new Date(n.date).getTime()>=cutoff);
+  let wet7=0,dirty7=0; nappies7.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet7++; if(n.type==='poo'||n.type==='both') dirty7++; });
+  const weightList = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
+  let weightChange7 = null;
+  if(weightList.length>=2){
+    const latest = weightList[weightList.length-1];
+    const before = weightList.filter(m=>new Date(m.date).getTime()<cutoff).slice(-1)[0] || weightList[0];
+    if(before.id!==latest.id){
+      const days=(new Date(latest.date)-new Date(before.date))/86400000;
+      weightChange7 = { diff: latest.value-before.value, gramsPerDay: days>0?((latest.value-before.value)*1000/days):null, days };
+    }
+  }
+  return {
+    feedsPerDay7: feeds7.length/7, avgInterval7, totalNursingMin7, expressedMl7, formulaMl7, pumpingMl7,
+    avgSleepPer24h: totalSleepMin7/7, sleepPeriods7: sleeps7.length, longestSleep7,
+    wet7PerDay: wet7/7, dirty7PerDay: dirty7/7, weightChange7
+  };
+}
+function generateInsights(){
+  const insights = [];
+  const cutoff3 = Date.now()-3*86400000, cutoff4 = Date.now()-4*86400000, cutoff7 = Date.now()-7*86400000;
+  const feeds4 = state.feeds.map(normalizeFeed).filter(f=>new Date(f.date).getTime()>=cutoff4);
+  if(feeds4.length>=6){
+    const evening = feeds4.filter(f=>{ const h=new Date(f.date).getHours(); return h>=18 && h<22; }).length;
+    if(evening/feeds4.length>=0.4) insights.push(`Feeding has been more frequent between 6–10pm over the last few days (${evening} of ${feeds4.length} feeds).`);
+  }
+  const feeds7 = state.feeds.map(normalizeFeed).filter(f=>new Date(f.date).getTime()>=cutoff7).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(feeds7.length>=6){
+    const gaps=[]; for(let i=1;i<feeds7.length;i++) gaps.push((new Date(feeds7[i].date)-new Date(feeds7[i-1].date))/3600000);
+    const sorted = gaps.slice().sort((a,b)=>a-b);
+    if(sorted.length){
+      const p25=sorted[Math.floor(sorted.length*0.25)], p75=sorted[Math.floor(sorted.length*0.75)];
+      insights.push(`Most feeds this week landed between about ${p25.toFixed(1)}h and ${p75.toFixed(1)}h apart.`);
+    }
+  }
+  const sleeps7 = state.sleeps.filter(s=>new Date(s.date).getTime()>=cutoff7).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  if(sleeps7.length>=4){
+    const half=Math.floor(sleeps7.length/2);
+    const earlyMax=Math.max(...sleeps7.slice(0,half).map(s=>s.mins||0));
+    const lateMax=Math.max(...sleeps7.slice(half).map(s=>s.mins||0));
+    if(lateMax>earlyMax*1.15) insights.push(`Her longest recorded sleep increased from about ${fmtDuration(earlyMax)} earlier this week to ${fmtDuration(lateMax)}.`);
+    else if(earlyMax>lateMax*1.15) insights.push(`Her longest recorded sleep decreased from about ${fmtDuration(earlyMax)} earlier this week to ${fmtDuration(lateMax)}.`);
+  }
+  const nappies7 = state.nappies.filter(n=>new Date(n.date).getTime()>=cutoff7);
+  if(nappies7.length>=5){
+    let wet=0; nappies7.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet++; });
+    insights.push(`Average wet nappies over the last 7 days: about ${(wet/7).toFixed(1)} per day.`);
+  }
+  const bf3 = state.feeds.map(normalizeFeed).filter(f=>f.type==='breastfeeding' && new Date(f.date).getTime()>=cutoff3);
+  if(bf3.length>=3){
+    const totalLeft=bf3.reduce((s,f)=>s+(f.leftMins||0),0), totalRight=bf3.reduce((s,f)=>s+(f.rightMins||0),0);
+    const total=totalLeft+totalRight;
+    if(total>0){
+      const leftShare=totalLeft/total;
+      if(leftShare>=0.4 && leftShare<=0.6) insights.push(`Breastfeeding has been fairly balanced between left and right over the last 3 days.`);
+      else insights.push(`Breastfeeding has leaned toward the ${leftShare>0.6?'left':'right'} side over the last 3 days (about ${Math.round(Math.max(leftShare,1-leftShare)*100)}%).`);
+    }
+  }
+  return insights;
+}
+
+/* ---------------- Personal baseline ("what's normal for THIS baby") ---------------- */
+function percentileOf(sortedArr, p){
+  if(!sortedArr.length) return null;
+  const idx = (p/100)*(sortedArr.length-1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if(lo===hi) return sortedArr[lo];
+  return sortedArr[lo] + (sortedArr[hi]-sortedArr[lo])*(idx-lo);
+}
+function meanOf(arr){ return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null; }
+const MIN_BASELINE_DAYS = 3;
+/* Builds a rolling personal baseline from the last `days` calendar days (excluding
+   today, since today is still in progress). Days with no logging at all are excluded
+   so a missed-logging day doesn't skew the range toward zero. */
+function baselineStats(days){
+  days = days || 7;
+  const daily = [];
+  for(let i=1;i<=days;i++){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    daily.push(dailySummary(d));
+  }
+  const active = daily.filter(d=> d.feedCount>0 || d.nappies.wet>0 || d.nappies.dirty>0 || d.totalSleepMin>0);
+  if(active.length < MIN_BASELINE_DAYS) return null;
+  const feedCounts = active.map(d=>d.feedCount).sort((a,b)=>a-b);
+  const wetCounts = active.map(d=>d.nappies.wet).sort((a,b)=>a-b);
+  const dirtyCounts = active.map(d=>d.nappies.dirty).sort((a,b)=>a-b);
+  const sleepMins = active.map(d=>d.totalSleepMin).sort((a,b)=>a-b);
+  const longestSleeps = active.filter(d=>d.longestSleep>0).map(d=>d.longestSleep).sort((a,b)=>a-b);
+  const intervals = active.filter(d=>d.avgIntervalMin!=null).map(d=>d.avgIntervalMin).sort((a,b)=>a-b);
+  const rangeOf = arr => arr.length ? {p25:percentileOf(arr,25), p75:percentileOf(arr,75), mean:meanOf(arr)} : null;
+  return {
+    days: active.length,
+    feeds: rangeOf(feedCounts),
+    wet: rangeOf(wetCounts),
+    dirty: rangeOf(dirtyCounts),
+    sleepMin: rangeOf(sleepMins),
+    longestSleep: rangeOf(longestSleeps),
+    interval: rangeOf(intervals)
+  };
+}
+/* Compares today so far against the rolling baseline and only surfaces a note when the
+   difference is large enough to plausibly matter — not routine day-to-day noise. */
+function generateBaselineInsights(){
+  const baseline = baselineStats(7);
+  if(!baseline) return { insufficient:true };
+  const today = dailySummary();
+  const insights = [];
+  const name = state.profile.name;
+
+  if(baseline.wet){
+    const lo=Math.round(baseline.wet.p25), hi=Math.round(baseline.wet.p75);
+    if(today.nappies.wet <= lo-2 && lo>=2){
+      insights.push(`A little different today — ${escapeHtml(name)} usually has ${lo}–${hi} wet nappies per 24 hours. ${today.nappies.wet} logged so far today.`);
+    } else if(today.nappies.wet >= hi+3){
+      insights.push(`More wet nappies than usual today — typically ${lo}–${hi}, ${today.nappies.wet} logged so far.`);
+    }
+  }
+  if(baseline.interval && today.avgIntervalMin!=null){
+    const lo=baseline.interval.p25, hi=baseline.interval.p75;
+    if(today.avgIntervalMin < lo*0.65){
+      insights.push(`Feeding has been closer together today — recent typical interval ${fmtDuration(lo)}–${fmtDuration(hi)}, today's average is ${fmtDuration(today.avgIntervalMin)}.`);
+    } else if(today.avgIntervalMin > hi*1.4){
+      insights.push(`Feeds have been more spaced out today — recent typical interval ${fmtDuration(lo)}–${fmtDuration(hi)}, today's average is ${fmtDuration(today.avgIntervalMin)}.`);
+    }
+  }
+  if(baseline.longestSleep && today.longestSleep>0){
+    const lo=baseline.longestSleep.p25, hi=baseline.longestSleep.p75;
+    if(today.longestSleep >= hi*1.3){
+      insights.push(`Longer sleep stretch today — her longest was ${fmtDuration(today.longestSleep)}; recent typical longest stretch is around ${fmtDuration(lo)}–${fmtDuration(hi)}.`);
+    } else if(today.longestSleep <= lo*0.65 && lo>=45){
+      insights.push(`Shorter sleep stretch today — her longest was ${fmtDuration(today.longestSleep)}; recent typical longest stretch is around ${fmtDuration(lo)}–${fmtDuration(hi)}.`);
+    }
+  }
+  return { insufficient:false, insights, baseline };
+}
+function renderBaselineCard(){
+  const b = baselineStats(7);
+  if(!b){
+    return `<div class="card"><h2>${escapeHtml(state.profile.name)}'s recent pattern</h2><div class="empty">More data needed.<br>Log a few more days and we'll start showing what's typical for her.</div></div>`;
+  }
+  return `
+    <div class="card">
+      <h2>${escapeHtml(state.profile.name)}'s recent pattern</h2>
+      <div class="meta-text" style="margin-bottom:8px;">Based on the last ${b.days} active day${b.days===1?'':'s'}</div>
+      ${b.feeds ? `<div class="rline">🍼 ${Math.round(b.feeds.p25)}–${Math.round(b.feeds.p75)} feeds/day</div>` : ''}
+      ${b.wet ? `<div class="rline">💧 ${Math.round(b.wet.p25)}–${Math.round(b.wet.p75)} wet nappies/day</div>` : ''}
+      ${b.dirty ? `<div class="rline">💩 ${Math.round(b.dirty.p25)}–${Math.round(b.dirty.p75)} dirty nappies/day</div>` : ''}
+      ${b.sleepMin ? `<div class="rline">😴 ${fmtDuration(b.sleepMin.p25)}–${fmtDuration(b.sleepMin.p75)} sleep/day</div>` : ''}
+      ${b.longestSleep ? `<div class="rline">🌙 Longest sleep usually ${fmtDuration(b.longestSleep.p25)}–${fmtDuration(b.longestSleep.p75)}</div>` : ''}
+      <div class="note" style="margin-top:10px;">This reflects what's recently been typical for ${escapeHtml(state.profile.name)} — not a medical recommendation, and it never overrides safety guidance like the fever warning above.</div>
+    </div>
+  `;
+}
+function renderCare(){
+  const feeds = state.feeds.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
+  const sleeps = state.sleeps.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
+  const nappies = state.nappies.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,20);
+  const todayC = nappyCountsToday();
+  const last24 = nappyCounts24h();
+  const ds = dailySummary();
+  const ws = weeklySummary();
+  const insights = generateInsights();
+  const baselineResult = generateBaselineInsights();
+  const combinedInsights = (baselineResult.insufficient ? [] : baselineResult.insights).concat(insights);
+  const baselineForToday = baselineResult.insufficient ? null : baselineResult.baseline;
+  return `
+    <div class="hero">
+      <button id="careBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
+      <h1>Care</h1><p>Feeding, sleep, and nappy history &amp; trends.</p>
+    </div>
+
+    <div class="card">
+      <h2>Today — ${ds.dayLabel}</h2>
+      <div class="rline">Feeding: ${ds.feedCount} feed${ds.feedCount===1?'':'s'}${ds.totalNursingMin?`, ${fmtDuration(ds.totalNursingMin)} total nursing`:''}${ds.avgIntervalMin!=null?`, avg interval ${fmtDuration(ds.avgIntervalMin)}`:''}</div>
+      <div class="rline">Sleep: ${fmtDuration(ds.totalSleepMin)} total across ${ds.sleepPeriods} period${ds.sleepPeriods===1?'':'s'}${ds.longestSleep?`, longest ${fmtDuration(ds.longestSleep)}`:''}</div>
+      <div class="rline">Nappies: ${ds.nappies.wet} wet${baselineForToday && baselineForToday.wet ? ` (typical ${Math.round(baselineForToday.wet.p25)}–${Math.round(baselineForToday.wet.p75)})` : ''} · ${ds.nappies.dirty} dirty</div>
+      <div class="rline">Growth: ${ds.growthToday.length ? ds.growthToday.map(m=>`${labelType(m.type)} ${m.value}${unitFor(m.type)}`).join(', ') : 'No measurement today'}</div>
+    </div>
+
+    ${renderBaselineCard()}
+
+    <div class="card">
+      <h2>Last 7 days</h2>
+      <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat"><span class="val">${ws.feedsPerDay7.toFixed(1)}</span><span class="lbl">Feeds / day</span></div>
+        <div class="stat"><span class="val">${ws.avgSleepPer24h ? fmtDuration(ws.avgSleepPer24h) : '—'}</span><span class="lbl">Sleep / 24h avg</span></div>
+        <div class="stat"><span class="val">${ws.wet7PerDay.toFixed(1)} / ${ws.dirty7PerDay.toFixed(1)}</span><span class="lbl">Wet / dirty per day</span></div>
+        <div class="stat"><span class="val">${ws.longestSleep7 ? fmtDuration(ws.longestSleep7) : '—'}</span><span class="lbl">Longest sleep</span></div>
+      </div>
+      <div class="note" style="margin-top:10px;">
+        ${ws.totalNursingMin7 ? `Total nursing: ${fmtDuration(ws.totalNursingMin7)}${ws.avgInterval7!=null?` · avg interval ${fmtDuration(ws.avgInterval7)}`:''}<br>` : ''}
+        ${ws.formulaMl7 ? `Formula: ${ws.formulaMl7} mL total<br>` : ''}
+        ${ws.expressedMl7 ? `Expressed milk: ${ws.expressedMl7} mL total<br>` : ''}
+        ${ws.pumpingMl7 ? `Pumping: ${ws.pumpingMl7} mL total<br>` : ''}
+        ${ws.weightChange7 ? `Weight: ${ws.weightChange7.diff>=0?'+':''}${ws.weightChange7.diff.toFixed(2)} kg over ${Math.round(ws.weightChange7.days)} days (${ws.weightChange7.gramsPerDay!=null?(ws.weightChange7.gramsPerDay>=0?'+':'')+ws.weightChange7.gramsPerDay.toFixed(1)+' g/day':''})` : ''}
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Insights</h2>
+      ${combinedInsights.length ? combinedInsights.map(i=>`<div class="insight-item">${i}</div>`).join('') : `<div class="empty">Not enough data for insights yet.<br>Keep logging and patterns will appear here.</div>`}
+    </div>
+
+    <div class="card">
+      <h2>Nappies</h2>
+      <div class="stat-grid" style="grid-template-columns:1fr 1fr;">
+        <div class="stat"><span class="val">${todayC.wet}💧 ${todayC.dirty}💩</span><span class="lbl">Today</span></div>
+        <div class="stat"><span class="val">${last24.wet}💧 ${last24.dirty}💩</span><span class="lbl">Last 24h</span></div>
+      </div>
+      ${nappies.length ? nappies.map(n=>`
+        <div class="row-item">
+          <div><div class="main">${n.type==='wet'?'💧 Wet':n.type==='poo'?'💩 Poo':'💧💩 Both'}</div><div class="sub">${fmtDateTime(n.date)}${n.note?' · '+escapeHtml(n.note):''}</div></div>
+          <button class="del" data-id="${n.id}" data-kind="nappy">•••</button>
+        </div>`).join('') : `<div class="empty">No nappies logged today.</div>`}
+    </div>
+    <div class="card">
+      <h2>Feeds</h2>
+      ${feeds.length ? feeds.map(f=>{ const nf=normalizeFeed(f); return `
+        <div class="row-item">
+          <div><div class="main">${feedSummaryLine(f)}</div><div class="sub">${fmtDateTime(nf.date)}${nf.note?' · '+escapeHtml(nf.note):''}</div></div>
+          <button class="del" data-id="${f.id}" data-kind="feed">•••</button>
+        </div>`; }).join('') : `<div class="empty">No feeds logged yet.</div>`}
+    </div>
+    <div class="card">
+      <h2>Sleep</h2>
+      ${sleeps.length ? sleeps.map(s=>`
+        <div class="row-item">
+          <div><div class="main">${s.label==='nap'?'☀️ Nap':'🌙 Night sleep'} · ${fmtDuration(s.mins)}</div><div class="sub">${fmtDateTime(s.date)}</div></div>
+          <button class="del" data-id="${s.id}" data-kind="sleep">•••</button>
+        </div>`).join('') : `<div class="empty">No sleep logged yet.</div>`}
+    </div>
+  `;
+}
+function bindCare(){
+  const back = document.getElementById('careBack');
+  if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
+  bindDeletes();
+}
+
+/* ---------------- Timeline (reachable from Home) ---------------- */
+function renderTimeline(){
+  const filters = ['all','feeding','sleep','nappies','growth','health','moments'];
+  const events = buildTimelineEvents().filter(e=> timelineFilter==='all' || e.cat===timelineFilter);
+  const groups = {};
+  const order = [];
+  events.forEach(e=>{
+    const dayKey = sydDateKey(e.date);
+    if(!groups[dayKey]){ groups[dayKey]=[]; order.push(dayKey); }
+    groups[dayKey].push(e);
+  });
+  const todayKey = sydDateKey();
+  const yestKey = sydDateKey(Date.now()-86400000);
+  return `
+    <div class="hero">
+      <button id="timelineBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
+      <h1>Timeline</h1><p>Everything that's happened, in order. Tap an entry for details.</p>
+    </div>
+    <div class="tabs" id="timelineFilters">
+      ${filters.map(f=>`<button data-tf="${f}" class="${timelineFilter===f?'active':''}">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`).join('')}
+    </div>
+    ${order.length ? order.map(dk=>`
+      <div class="tl-day">${dk===todayKey?'Today':dk===yestKey?'Yesterday':new Date(dk+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric',timeZone:APP_TZ})}</div>
+      <div class="tl-group">
+        ${groups[dk].map(e=>`
+          <div class="tl-row" data-tlitem="${e.kind}:${e.id}">
+            <div class="tl-dot-col"><div class="tl-dot"></div><div class="tl-line"></div></div>
+            <div class="tl-content">
+              <div class="tl-time">${new Date(e.date).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})}</div>
+              <div class="tl-line-text">${e.line}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    `).join('') : `<div class="empty">Nothing logged yet${timelineFilter!=='all'?' for this filter':''}.</div>`}
+  `;
+}
+function bindTimeline(){
+  document.querySelectorAll('#timelineFilters [data-tf]').forEach(b=>{
+    b.addEventListener('click', ()=>{ timelineFilter=b.dataset.tf; renderMain(); });
+  });
+  const back = document.getElementById('timelineBack');
+  if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
+  document.querySelectorAll('[data-tlitem]').forEach(row=>{
+    row.addEventListener('click', ()=>{
+      const [kind,id] = row.dataset.tlitem.split(':');
+      openDetailSheet(kind, id);
+    });
+  });
+}
+
+/* ---------------- Health (vaccines + appointments) ---------------- */
+let showHiddenVaccines = false;
+function renderBabyProfileCard(){
+  const p = state.profile;
+  const region = p.vaccineRegion || 'generic';
+  return `
+    <div class="card">
+      <h2>👶 Baby profile</h2>
+      <label>Born early? Gestational age at birth (optional)</label>
+      <div class="fieldrow">
+        <div><input type="number" inputmode="numeric" id="gestWeeksInput" placeholder="Weeks" value="${p.gestWeeks!=null?p.gestWeeks:''}"></div>
+        <div><input type="number" inputmode="numeric" id="gestDaysInput" placeholder="+ Days" value="${p.gestDays!=null?p.gestDays:''}"></div>
+      </div>
+      <div class="note">Leave blank if born at term (37+ weeks). If preterm, Growth will also show a corrected age alongside her chronological age.</div>
+      <label>Vaccination schedule / region</label>
+      <select id="vaccineRegionSelect">
+        ${Object.keys(VACCINE_SCHEDULES).map(k=>`<option value="${k}" ${region===k?'selected':''}>${VACCINE_SCHEDULES[k].label}</option>`).join('')}
+      </select>
+      <button class="btn ghost" id="saveProfileBtn">Save profile</button>
+    </div>
+  `;
+}
+function dueVaccinesNearDate(dateISO, windowDays){
+  windowDays = windowDays||30;
+  return state.vaccines.filter(v=>{
+    if(v.givenDate || v.notApplicable || v.hidden) return false;
+    const due = vaccineDueDate(v);
+    if(!due) return false;
+    return Math.abs((due-new Date(dateISO))/86400000) <= windowDays;
+  });
+}
+function renderVaccineRow(v){
+  const status = vaccineStatus(v);
+  const statusLabel = status==='given'?'Given ✓':status==='due'?'Due':status==='na'?'N/A':'Upcoming';
+  const dueDate = vaccineDueDate(v);
+  const subLine = v.givenDate
+    ? `Given ${fmtDate(v.givenDate)}${v.provider?' · '+escapeHtml(v.provider):''}`
+    : v.notApplicable ? 'Marked not applicable'
+    : `Due around ${dueDate?fmtDate(dueDate.toISOString()):v.dueMonths+' mo'}`;
+  let panel = '';
+  if(expandedVaccineId===v.id){
+    const actions = [];
+    if(v.hidden){
+      actions.push(`<button data-vaction="unhide" data-id="${v.id}">Unhide</button>`);
+    } else {
+      if(status!=='given' && !v.notApplicable){
+        actions.push(`<button data-vaction="given" data-id="${v.id}">Mark given</button>`);
+        actions.push(`<button data-vaction="na" data-id="${v.id}">Not applicable</button>`);
+      }
+      if(v.notApplicable) actions.push(`<button data-vaction="undo-na" data-id="${v.id}">Undo not applicable</button>`);
+      if(status==='given') actions.push(`<button data-vaction="undo-given" data-id="${v.id}">Undo given</button>`);
+      actions.push(`<button data-vaction="hide" data-id="${v.id}">Hide</button>`);
+    }
+    actions.push(`<button data-vaction="delete" data-id="${v.id}" class="danger">Delete</button>`);
+    panel = `<div class="menu-panel">${actions.join('')}</div>`;
+  }
+  let givenForm = '';
+  if(markingGivenId===v.id){
+    givenForm = `
+      <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
+        <label>Date given</label><input type="date" id="gvDate-${v.id}" value="${todayDateInput()}">
+        <label>Provider (optional)</label><input type="text" id="gvProvider-${v.id}" placeholder="e.g. Dr Vasu">
+        <label>Batch / lot (optional)</label><input type="text" id="gvBatch-${v.id}" placeholder="optional">
+        <label>Reaction (optional)</label><input type="text" id="gvReaction-${v.id}" placeholder="optional">
+        <button class="btn secondary" style="margin-top:10px;" data-confirmgiven="${v.id}">Confirm given</button>
+      </div>`;
+  }
+  return `
+    <div class="row-item" style="flex-wrap:wrap;">
+      <div><div class="main">${escapeHtml(v.name)}${v.dose?` <span style="font-weight:500;color:var(--ink-soft);">· ${escapeHtml(v.dose)}</span>`:''}${v.hidden?' <span style="color:var(--ink-soft);font-weight:500;">(hidden)</span>':''}</div><div class="sub">${subLine}</div></div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="status-chip ${status}">${statusLabel}</span>
+        <button class="menu-btn" data-togglevaccine="${v.id}">•••</button>
+      </div>
+    </div>
+    ${panel}${givenForm}
+  `;
+}
+function healthCatIcon(cat){ return {symptom:'🤒', medication:'💊', advice:'🩺', note:'📝', other:'📋'}[cat] || '📋'; }
+
+/* ---------------- Export / Share health summary ---------------- */
+let exportRangeKey = '7d';
+let exportCustomStart = null, exportCustomEnd = null;
+function computeExportRange(){
+  const now = new Date();
+  if(exportRangeKey==='24h') return {start:new Date(now-86400000), end:now};
+  if(exportRangeKey==='7d') return {start:new Date(now-7*86400000), end:now};
+  if(exportRangeKey==='birth') return {start:new Date(state.profile.birthDate), end:now};
+  if(exportRangeKey==='custom' && exportCustomStart && exportCustomEnd) return {start:new Date(exportCustomStart), end:new Date(exportCustomEnd+'T23:59:59')};
+  return {start:new Date(now-7*86400000), end:now};
+}
+function compileHealthSummary(start, end){
+  const inRange = d => { const t=new Date(d).getTime(); return t>=start.getTime() && t<=end.getTime(); };
+  const p = state.profile;
+  const corrected = correctedAgeInfo();
+  const weightList = state.measurements.filter(m=>m.type==='weight').sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const birthWeight = weightList[0];
+  const latestWeight = weightList[weightList.length-1];
+  const measurementsInRange = state.measurements.filter(m=>inRange(m.date)).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const feedsInRange = state.feeds.map(normalizeFeed).filter(f=>inRange(f.date));
+  const sleepsInRange = state.sleeps.filter(s=>inRange(s.date));
+  const nappiesInRange = state.nappies.filter(n=>inRange(n.date));
+  const tempsInRange = state.temperatures.filter(t=>inRange(t.date));
+  const healthInRange = state.healthRecords.filter(r=>inRange(r.date));
+  const vaccinesGiven = state.vaccines.filter(v=>v.givenDate).sort((a,b)=>new Date(a.givenDate)-new Date(b.givenDate));
+  const vaccinesUpcoming = state.vaccines.filter(v=>!v.givenDate && !v.notApplicable && !v.hidden).sort((a,b)=>a.dueMonths-b.dueMonths);
+  const apptsInRange = state.appointments.filter(a=>inRange(a.date));
+  const apptsUpcoming = state.appointments.filter(a=>(a.status||'upcoming')==='upcoming' && new Date(a.date)>=new Date()).sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+  const days = Math.max(1, (end-start)/86400000);
+  const breastfeeds = feedsInRange.filter(f=>f.type==='breastfeeding');
+  const totalNursingMin = breastfeeds.reduce((s,f)=>s+(f.totalMins||0),0);
+  const formulaMl = feedsInRange.filter(f=>f.type==='formula').reduce((s,f)=>s+(f.consumedMl||0),0);
+  const expressedMl = feedsInRange.filter(f=>f.type==='expressed').reduce((s,f)=>s+(f.consumedMl||0),0);
+  const pumpingMl = feedsInRange.filter(f=>f.type==='pumping').reduce((s,f)=>s+(f.pumpTotalMl||0),0);
+  const totalSleepMin = sleepsInRange.reduce((s,x)=>s+(x.mins||0),0);
+  const longestSleep = sleepsInRange.reduce((mx,x)=>Math.max(mx,x.mins||0),0);
+  let wetCount=0, dirtyCount=0; nappiesInRange.forEach(n=>{ if(n.type==='wet'||n.type==='both') wetCount++; if(n.type==='poo'||n.type==='both') dirtyCount++; });
+
+  return { p, corrected, birthWeight, latestWeight, measurementsInRange, feedsInRange, feedsPerDay: feedsInRange.length/days,
+    totalNursingMin, formulaMl, expressedMl, pumpingMl, totalSleepMin, sleepPeriods: sleepsInRange.length, longestSleep,
+    avgSleepPerDay: totalSleepMin/days, wetCount, dirtyCount, wetPerDay: wetCount/days, dirtyPerDay: dirtyCount/days,
+    tempsInRange, healthInRange, vaccinesGiven, vaccinesUpcoming, apptsInRange, apptsUpcoming, start, end };
+}
+function renderSummaryReport(sum){
+  const p = sum.p;
+  return `
+    <div class="report">
+      <h2 style="margin-top:0;">${escapeHtml(p.name)} — Health Summary</h2>
+      <div class="note">Period: ${fmtDate(sum.start)} – ${fmtDate(sum.end)} · Generated ${fmtDateFull(new Date())}</div>
+
+      <h3>Baby</h3>
+      <div class="rline">Name: ${escapeHtml(p.name)}</div>
+      <div class="rline">Date of birth: ${fmtDateFull(p.birthDate)}</div>
+      <div class="rline">Current age: ${ageLabelShort(p.birthDate)}</div>
+      ${p.gestWeeks ? `<div class="rline">Gestational age at birth: ${p.gestWeeks}w ${p.gestDays||0}d</div>` : ''}
+      ${sum.corrected && !sum.corrected.notYetTermEquivalent ? `<div class="rline">Corrected age: ${sum.corrected.label}</div>` : ''}
+
+      <h3>Growth</h3>
+      ${sum.birthWeight ? `<div class="rline">Birth weight: ${sum.birthWeight.value} kg (${fmtDate(sum.birthWeight.date)})</div>` : ''}
+      ${sum.latestWeight ? `<div class="rline">Latest weight: ${sum.latestWeight.value} kg (${fmtDate(sum.latestWeight.date)})</div>` : ''}
+      ${sum.birthWeight && sum.latestWeight && sum.birthWeight.id!==sum.latestWeight.id ? `<div class="rline">Change since birth: ${(sum.latestWeight.value-sum.birthWeight.value)>=0?'+':''}${(sum.latestWeight.value-sum.birthWeight.value).toFixed(2)} kg</div>` : ''}
+      ${sum.measurementsInRange.length ? `<div class="rline">Measurements in period: ${sum.measurementsInRange.map(m=>`${labelType(m.type)} ${m.value}${unitFor(m.type)} (${fmtDate(m.date)})`).join('; ')}</div>` : `<div class="rline">No measurements logged in this period.</div>`}
+
+      <h3>Feeding</h3>
+      <div class="rline">${sum.feedsPerDay.toFixed(1)} feeds/day average</div>
+      ${sum.totalNursingMin ? `<div class="rline">Breastfeeding: ${fmtDuration(sum.totalNursingMin)} total nursing time</div>` : ''}
+      ${sum.formulaMl ? `<div class="rline">Formula: ${sum.formulaMl} mL total</div>` : ''}
+      ${sum.expressedMl ? `<div class="rline">Expressed milk: ${sum.expressedMl} mL total</div>` : ''}
+      ${sum.pumpingMl ? `<div class="rline">Pumping: ${sum.pumpingMl} mL total</div>` : ''}
+
+      <h3>Sleep</h3>
+      <div class="rline">Total sleep: ${fmtDuration(sum.totalSleepMin)} across ${sum.sleepPeriods} period${sum.sleepPeriods===1?'':'s'}</div>
+      <div class="rline">Longest stretch: ${fmtDuration(sum.longestSleep)}</div>
+      <div class="rline">Average per day: ${fmtDuration(sum.avgSleepPerDay)}</div>
+
+      <h3>Nappies</h3>
+      <div class="rline">${sum.wetCount} wet · ${sum.dirtyCount} dirty (${sum.wetPerDay.toFixed(1)} / ${sum.dirtyPerDay.toFixed(1)} per day)</div>
+
+      <h3>Health</h3>
+      ${sum.tempsInRange.length ? sum.tempsInRange.map(t=>`<div class="rline">🌡 ${t.tempC}°C (${t.method}) — ${fmtDateTime(t.date)}</div>`).join('') : `<div class="rline">No temperatures logged in this period.</div>`}
+      ${sum.healthInRange.map(r=>`<div class="rline">${healthCatIcon(r.category)} ${escapeHtml(r.title)} — ${fmtDate(r.date)}</div>`).join('')}
+
+      <h3>Vaccinations</h3>
+      ${sum.vaccinesGiven.length ? `<div class="rline">Given: ${sum.vaccinesGiven.map(v=>`${escapeHtml(v.name)}${v.dose?' ('+escapeHtml(v.dose)+')':''} — ${fmtDate(v.givenDate)}`).join('; ')}</div>` : `<div class="rline">None recorded as given yet.</div>`}
+      ${sum.vaccinesUpcoming.length ? `<div class="rline">Upcoming: ${sum.vaccinesUpcoming.slice(0,8).map(v=>escapeHtml(v.name)).join(', ')}</div>` : ''}
+
+      <h3>Appointments</h3>
+      ${sum.apptsInRange.length ? `<div class="rline">In this period: ${sum.apptsInRange.map(a=>`${escapeHtml(a.title)} — ${fmtDate(a.date)}`).join('; ')}</div>` : ''}
+      ${sum.apptsUpcoming.length ? `<div class="rline">Upcoming: ${sum.apptsUpcoming.slice(0,4).map(a=>`${escapeHtml(a.title)} — ${fmtDate(a.date)}`).join('; ')}</div>` : `<div class="rline">No upcoming appointments scheduled.</div>`}
+
+      <div class="note" style="margin-top:16px;">Generated by ${escapeHtml(p.name)}'s Growth Log. This reflects logged data only — it is not a medical record or diagnosis.</div>
+    </div>
+  `;
+}
+function renderExport(){
+  const {start,end} = computeExportRange();
+  const sum = compileHealthSummary(start, end);
+  return `
+    <div class="hero">
+      <button id="exportBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;">← Back</button>
+      <h1>Export summary 📄</h1><p>A concise summary to share with your GP, pediatrician, or nurse.</p>
+    </div>
+    <div class="card no-print">
+      <label>Range</label>
+      <div class="tabs" id="exportRangeTabs">
+        <button data-er="24h" class="${exportRangeKey==='24h'?'active':''}">Last 24h</button>
+        <button data-er="7d" class="${exportRangeKey==='7d'?'active':''}">Last 7 days</button>
+        <button data-er="birth" class="${exportRangeKey==='birth'?'active':''}">Since birth</button>
+        <button data-er="custom" class="${exportRangeKey==='custom'?'active':''}">Custom</button>
+      </div>
+      ${exportRangeKey==='custom' ? `
+        <div class="fieldrow">
+          <div><label>From</label><input type="date" id="exportStart" value="${exportCustomStart||''}"></div>
+          <div><label>To</label><input type="date" id="exportEnd" value="${exportCustomEnd||''}"></div>
+        </div>
+        <button class="btn ghost" id="applyCustomRange">Apply range</button>
+      ` : ''}
+      <button class="btn" id="printBtn">🖨️ Print / Save as PDF</button>
+    </div>
+    <div class="card" id="printArea">${renderSummaryReport(sum)}</div>
+  `;
+}
+function bindExport(){
+  document.getElementById('exportBack').addEventListener('click', ()=>{ currentView='home'; render(); });
+  document.querySelectorAll('#exportRangeTabs [data-er]').forEach(b=>{
+    b.addEventListener('click', ()=>{ exportRangeKey=b.dataset.er; renderMain(); });
+  });
+  const applyBtn = document.getElementById('applyCustomRange');
+  if(applyBtn) applyBtn.addEventListener('click', ()=>{
+    exportCustomStart = document.getElementById('exportStart').value;
+    exportCustomEnd = document.getElementById('exportEnd').value;
+    renderMain();
+  });
+  document.getElementById('printBtn').addEventListener('click', ()=>{ window.print(); });
+}
+function renderTemperatureCard(){
+  const temps = state.temperatures.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const latest = temps[0];
+  let banner = '';
+  if(latest){
+    const latestAgeM = ageMonthsDecimal(state.profile.birthDate, latest.date);
+    const hoursAgo = (Date.now()-new Date(latest.date).getTime())/3600000;
+    if(latestAgeM<3 && latest.tempC>=38.0 && hoursAgo<6){
+      banner = `<div class="urgent-banner"><div class="head">⚠️ Seek urgent medical assessment</div>A temperature of 38.0°C or higher in a baby under 3 months old should be assessed by a doctor promptly, rather than waiting to see how it develops. This app can't tell you why her temperature is elevated — only that this combination of age and reading calls for prompt medical attention.</div>`;
+    }
+  }
+  return `
+    <div class="card">
+      <h2>🌡️ Temperature</h2>
+      ${banner}
+      <div class="fieldrow">
+        <div><label>Temperature (°C)</label><input type="number" step="0.1" inputmode="decimal" id="tempVal" placeholder="37.1"></div>
+        <div><label>Method</label><select id="tempMethod">
+          <option value="axillary" ${currentTempMethod==='axillary'?'selected':''}>Axillary</option>
+          <option value="rectal" ${currentTempMethod==='rectal'?'selected':''}>Rectal</option>
+          <option value="ear" ${currentTempMethod==='ear'?'selected':''}>Ear</option>
+          <option value="forehead" ${currentTempMethod==='forehead'?'selected':''}>Forehead</option>
+          <option value="other" ${currentTempMethod==='other'?'selected':''}>Other</option>
+        </select></div>
+      </div>
+      <label>Time</label><input type="datetime-local" id="tempDate" value="${todayInput()}">
+      <label>Note (optional)</label><input type="text" id="tempNote" placeholder="optional">
+      <button class="btn secondary" id="saveTempBtn">Log temperature</button>
+      ${temps.length ? temps.slice(0,10).map(t=>`
+        <div class="row-item"><div><div class="main">🌡 ${t.tempC}°C</div><div class="sub">${t.method?t.method.charAt(0).toUpperCase()+t.method.slice(1):''} · ${fmtDateTime(t.date)}${t.note?' · '+escapeHtml(t.note):''}</div></div><button class="del" data-id="${t.id}" data-kind="temperature">Delete</button></div>`).join('') : `<div class="empty">No temperatures logged yet.</div>`}
+    </div>
+  `;
+}
+function renderHealthRecordsCard(){
+  const recs = state.healthRecords.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const cats = [{k:'symptom',l:'Symptom / illness'},{k:'medication',l:'Medication'},{k:'advice',l:'Doctor advice'},{k:'note',l:'Health note'},{k:'other',l:'Other'}];
+  return `
+    <div class="card">
+      <h2>📋 Health records</h2>
+      <label>Category</label>
+      <select id="healthCatSelect">${cats.map(c=>`<option value="${c.k}" ${currentHealthCat===c.k?'selected':''}>${c.l}</option>`).join('')}</select>
+      <label>Title</label><input type="text" id="healthTitle" placeholder="e.g. Runny nose">
+      <label>Time</label><input type="datetime-local" id="healthDate" value="${todayInput()}">
+      <label>Details (optional)</label><textarea id="healthDetails" rows="2" placeholder="optional"></textarea>
+      <button class="btn" id="saveHealthBtn">Save record</button>
+      ${recs.length ? recs.slice(0,10).map(r=>`
+        <div class="row-item"><div><div class="main">${healthCatIcon(r.category)} ${escapeHtml(r.title)}</div><div class="sub">${fmtDateTime(r.date)}${r.details?' · '+escapeHtml(r.details):''}</div></div><button class="del" data-id="${r.id}" data-kind="healthRecord">Delete</button></div>`).join('') : `<div class="empty">No health records yet.</div>`}
+    </div>
+  `;
+}
+function renderApptRow(a){
+  const status = a.status || 'upcoming';
+  const statusChipClass = status==='completed' ? 'given' : status==='cancelled' ? 'na' : 'upcoming';
+  const statusLabel = status==='completed'?'Completed':status==='cancelled'?'Cancelled':'Upcoming';
+  const relevantVaccines = status==='upcoming' ? dueVaccinesNearDate(a.date) : [];
+  let body = `
+    <div class="row-item" style="flex-wrap:wrap;">
+      <div><div class="main">${escapeHtml(a.title)}</div><div class="sub">${fmtDateFull(a.date)}${a.note?' · '+escapeHtml(a.note):''}</div></div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span class="status-chip ${statusChipClass}">${statusLabel}</span>
+        <button class="menu-btn" data-toggleappt="${a.id}">•••</button>
+      </div>
+    </div>
+  `;
+  if(relevantVaccines.length){
+    body += `<div class="note" style="margin:-6px 0 10px;">💉 Potentially due at this visit: ${relevantVaccines.map(v=>escapeHtml(v.name)).join(', ')}</div>`;
+  }
+  if(expandedApptId===a.id){
+    const questions = a.questions||[];
+    body += `
+      <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
+        <div class="qlist">
+          ${questions.length ? questions.map(q=>`<label class="check"><input type="checkbox" data-qcheck="${a.id}:${q.id}" ${q.checked?'checked':''}> <span style="${q.checked?'text-decoration:line-through;color:var(--ink-soft);':''}">${escapeHtml(q.text)}</span></label>`).join('') : `<div class="note">No questions added yet.</div>`}
+        </div>
+        <div class="fieldrow" style="margin-top:6px;">
+          <input type="text" id="newQ-${a.id}" placeholder="Add a question">
+          <button style="width:auto;padding:8px 14px;border-radius:10px;border:2px solid var(--line);background:var(--card);font-weight:700;font-size:12px;" data-addq="${a.id}">Add</button>
+        </div>
+        <div class="menu-panel" style="margin-top:10px;">
+          ${status!=='completed' ? `<button data-apptaction="complete" data-id="${a.id}">Mark completed</button>` : ''}
+          ${status==='upcoming' ? `<button data-apptaction="cancel" data-id="${a.id}">Cancel</button>` : ''}
+          <button data-apptaction="delete" data-id="${a.id}" class="danger">Delete</button>
+        </div>
+      </div>
+    `;
+  }
+  if(completingApptId===a.id){
+    const relevantV = dueVaccinesNearDate(a.date);
+    body += `
+      <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
+        <label>Weight measured? (kg, optional)</label><input type="number" step="0.01" id="compWeight-${a.id}" placeholder="optional">
+        <label>Length measured? (cm, optional)</label><input type="number" step="0.1" id="compLength-${a.id}" placeholder="optional">
+        <label>Head circumference measured? (cm, optional)</label><input type="number" step="0.1" id="compHc-${a.id}" placeholder="optional">
+        ${relevantV.length ? `<label>Vaccines given at this visit</label><div class="qlist">${relevantV.map(v=>`<label class="check"><input type="checkbox" id="compVac-${a.id}-${v.id}"> ${escapeHtml(v.name)}${v.dose?' · '+escapeHtml(v.dose):''}</label>`).join('')}</div>` : ''}
+        <label>Doctor notes (optional)</label><textarea id="compNotes-${a.id}" rows="2" placeholder="optional"></textarea>
+        <label class="check" style="margin-top:6px;"><input type="checkbox" id="compFollowup-${a.id}"> Follow-up required</label>
+        <button class="btn" style="margin-top:10px;" data-confirmcomplete="${a.id}">Save &amp; complete visit</button>
+      </div>
+    `;
+  }
+  return body;
+}
+let healthSubView = null;
+function nextHealthAction(){
+  const dueVaccines = state.vaccines.filter(v=>!v.givenDate && !v.notApplicable && !v.hidden)
+    .map(v=>({v, due: vaccineDueDate(v)}))
+    .sort((a,b)=>a.due-b.due);
+  const upcomingAppt = state.appointments.filter(a=>(a.status||'upcoming')==='upcoming' && new Date(a.date)>=new Date())
+    .sort((a,b)=>new Date(a.date)-new Date(b.date))[0];
+  const candidates = [];
+  if(dueVaccines[0]) candidates.push({type:'vaccine', date:dueVaccines[0].due, label:dueVaccines[0].v.name, sub:`Due around ${dueVaccines[0].v.dueMonths} mo`});
+  if(upcomingAppt) candidates.push({type:'appointment', date:new Date(upcomingAppt.date), label:upcomingAppt.title, sub:fmtDateFull(upcomingAppt.date)});
+  candidates.sort((a,b)=>a.date-b.date);
+  return candidates[0] || null;
+}
+function healthBackHeader(title){
+  return `<div class="hero"><button class="healthBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Health</button><h1>${title}</h1></div>`;
+}
+function renderHealthOverview(){
+  const next = nextHealthAction();
+  const lastTemp = state.temperatures.slice().sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+  const lastAppt = state.appointments.slice().sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+  return `
+    <div class="hero"><h1>Health</h1><p>Vaccines, appointments, and everyday health notes.</p></div>
+    ${next ? `
+    <div class="section-header">Next action</div>
+    <div class="card" id="nextActionRow" style="cursor:pointer;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        ${icon(next.type==='vaccine'?'shield':'calendar',22)}
+        <div>
+          <div style="font-weight:800;font-size:14.5px;">${escapeHtml(next.label)}</div>
+          <div class="meta-text">${next.sub}</div>
+        </div>
+      </div>
+      <div class="support-text" style="margin-top:12px;color:var(--lavender-deep);font-weight:700;">View details →</div>
+    </div>` : ''}
+
+    <div class="section-header">Health records</div>
+    <div class="row-item" data-gosub="vaccinations" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('shield',17)}Vaccinations</div><div class="meta-text">→</div></div>
+    <div class="row-item" data-gosub="appointments" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('calendar',17)}Appointments</div><div class="meta-text">→</div></div>
+    <div class="row-item" data-gosub="temphealth" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('temp',17)}Temperature &amp; Health</div><div class="meta-text">→</div></div>
+
+    ${(lastTemp || lastAppt) ? `
+    <div class="section-header">Recent</div>
+    ${lastTemp ? `<div class="row-item"><div class="main" style="font-weight:600;">🌡 ${lastTemp.tempC}°C</div><div class="meta-text">${timeAgo(lastTemp.date)}</div></div>` : ''}
+    ${lastAppt ? `<div class="row-item"><div class="main" style="font-weight:600;">🩺 ${escapeHtml(lastAppt.title)}</div><div class="meta-text">${fmtDate(lastAppt.date)}</div></div>` : ''}
+    ` : ''}
+
+    <div class="section-header">More</div>
+    <div class="row-item" data-gosub="profile" style="cursor:pointer;"><div class="main" style="font-weight:600;">Baby profile &amp; vaccine schedule</div><div class="meta-text">→</div></div>
+    <div class="row-item" id="goExportBtn" style="cursor:pointer;"><div class="main" style="font-weight:600;">Export health summary</div><div class="meta-text">→</div></div>
+    <div class="row-item" data-gosub="backup" style="cursor:pointer;"><div class="main" style="font-weight:600;">Data &amp; Backup</div><div class="meta-text">→</div></div>
+    <div class="row-item" id="signOutRow" style="cursor:pointer;"><div class="main" style="font-weight:600;">Sign out</div><div class="meta-text">${authUser ? escapeHtml(authUser.email||'') : ''}</div></div>
+  `;
+}
+function renderHealthVaccinations(){
+  const vaccines = state.vaccines.slice().sort((a,b)=>a.dueMonths-b.dueMonths);
+  const visibleVaccines = showHiddenVaccines ? vaccines : vaccines.filter(v=>!v.hidden);
+  const hiddenCount = vaccines.filter(v=>v.hidden).length;
+  const region = state.profile.vaccineRegion || 'generic';
+  return `
+    ${healthBackHeader('Vaccinations')}
+    <div class="card">
+      ${visibleVaccines.length ? visibleVaccines.map(renderVaccineRow).join('') : `<div class="empty">No vaccines listed yet. Load a schedule below, or add your own.</div>`}
+      ${hiddenCount ? `<button class="btn ghost" id="toggleHiddenVac" style="margin-top:10px;">${showHiddenVaccines?'Hide the hidden ones again':`Show ${hiddenCount} hidden`}</button>` : ''}
+      <button class="btn ghost" id="loadDefaults">Load ${escapeHtml(VACCINE_SCHEDULES[region].label)} schedule</button>
+      <div class="note">${VACCINE_SCHEDULES[region].sourceNote}</div>
+    </div>
+    <div class="card">
+      <h2>Add a vaccine</h2>
+      <label>Name</label><input type="text" id="vacName" placeholder="e.g. Flu shot">
+      <div class="fieldrow">
+        <div><label>Dose (optional)</label><input type="text" id="vacDose" placeholder="e.g. Dose 2"></div>
+        <div><label>Due (months old)</label><input type="number" step="0.5" id="vacDue" placeholder="6"></div>
+      </div>
+      <button class="btn secondary" id="saveVac">Add vaccine</button>
+    </div>
+  `;
+}
+function renderHealthAppointments(){
+  const appts = state.appointments.slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const upcoming = appts.filter(a=> (a.status||'upcoming')==='upcoming');
+  const history = appts.filter(a=> a.status==='completed' || a.status==='cancelled').sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return `
+    ${healthBackHeader('Appointments')}
+    <div class="card">
+      <h2>New appointment</h2>
+      <label>What's it for</label><input type="text" id="apptTitle" placeholder="e.g. 2-month checkup">
+      <label>Date &amp; time</label><input type="datetime-local" id="apptDate" value="${todayInput()}">
+      <label>Note (optional)</label><textarea id="apptNote" rows="2" placeholder="Anything to remember"></textarea>
+      <button class="btn" id="saveAppt">Save appointment</button>
+    </div>
+    <div class="card">
+      <h2>Upcoming visits</h2>
+      ${upcoming.length ? upcoming.map(renderApptRow).join('') : `<div class="empty">Nothing scheduled yet.</div>`}
+    </div>
+    ${history.length ? `
+    <div class="card">
+      <h2>Visit history</h2>
+      ${history.map(renderApptRow).join('')}
+    </div>` : ''}
+  `;
+}
+function renderHealthTempAndHealth(){
+  return `${healthBackHeader('Temperature & Health')}${renderTemperatureCard()}${renderHealthRecordsCard()}`;
+}
+function renderAppearanceCard(){
+  const current = (state.prefs && state.prefs.theme) || 'auto';
+  return `
+    <div class="card">
+      <h2>Appearance</h2>
+      <div class="seg" id="themeSeg">
+        <button data-theme-choice="auto" class="${current==='auto'?'active':''}">Auto</button>
+        <button data-theme-choice="light" class="${current==='light'?'active':''}">Light</button>
+        <button data-theme-choice="dark" class="${current==='dark'?'active':''}">Dark</button>
+      </div>
+      <div class="note">Auto follows your phone's system setting — handy for it to go dark automatically at night.</div>
+    </div>
+  `;
+}
+function renderHealthProfile(){
+  return `${healthBackHeader('Baby profile')}${renderBabyProfileCard()}${renderAppearanceCard()}`;
+}
+/* ---------------- Backup & Restore ---------------- */
+function buildBackupObject(){
+  return { backupVersion: 1, createdAt: new Date().toISOString(), appData: buildPayload() };
+}
+function downloadBackupFile(){
+  const backup = buildBackupObject();
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const dateStr = todayDateInput();
+  const nameSlug = (state.profile.name||'baby').toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  a.href = url;
+  a.download = `${nameSlug}-growth-log-backup-${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+function validateBackup(parsed){
+  if(!parsed || typeof parsed!=='object') return {ok:false, error:"This doesn't appear to be a valid Baby Tracker backup."};
+  if(typeof parsed.backupVersion !== 'number') return {ok:false, error:"This doesn't appear to be a valid Baby Tracker backup."};
+  if(parsed.backupVersion > 1) return {ok:false, error:"This backup was created by a newer app version and can't be restored here yet."};
+  if(!parsed.appData || typeof parsed.appData !== 'object') return {ok:false, error:"The backup file appears to be damaged."};
+  if(!parsed.appData.profile || !parsed.appData.profile.name || !parsed.appData.profile.birthDate) return {ok:false, error:"The backup file appears to be damaged."};
+  return {ok:true};
+}
+function renderHealthBackup(){
+  const lastBackup = state.prefs && state.prefs.lastBackupAt;
+  return `
+    ${healthBackHeader('Data & Backup')}
+    <div class="card">
+      <h2>Backup</h2>
+      <div class="support-text" style="margin-top:0;">Keep a copy of ${escapeHtml(state.profile.name)}'s tracker data on this device.</div>
+      <button class="btn" id="createBackupBtn" style="margin-top:14px;">Create backup</button>
+      ${lastBackup ? `<div class="meta-text" style="margin-top:10px;">Last backup: ${fmtDateTime(lastBackup)}${state.prefs.lastBackupCount!=null?` · ${state.prefs.lastBackupCount} records`:''}</div>` : ''}
+    </div>
+    <div class="card">
+      <h2>Restore</h2>
+      <div class="support-text" style="margin-top:0;">Choose a previously saved backup file. Restoring will replace the current tracker data on this device with the contents of that backup.</div>
+      <input type="file" accept="application/json" id="restoreFileInput" style="margin-top:14px;">
+    </div>
+    <div class="note">Moment photos are stored inside the app's data and are included in the backup file. This is a manual, on-device backup — there's no automatic phone-to-phone transfer.</div>
+  `;
+}
+function renderHealth(){
+  if(healthSubView==='vaccinations') return renderHealthVaccinations();
+  if(healthSubView==='appointments') return renderHealthAppointments();
+  if(healthSubView==='temphealth') return renderHealthTempAndHealth();
+  if(healthSubView==='profile') return renderHealthProfile();
+  if(healthSubView==='backup') return renderHealthBackup();
+  return renderHealthOverview();
+}
+function bindHealth(){
+  document.querySelectorAll('.healthBack').forEach(b=>{
+    b.addEventListener('click', ()=>{ healthSubView=null; renderMain(); });
+  });
+  document.querySelectorAll('[data-gosub]').forEach(b=>{
+    b.addEventListener('click', ()=>{ healthSubView=b.dataset.gosub; renderMain(); });
+  });
+  const nar2 = document.getElementById('nextActionRow');
+  if(nar2) nar2.addEventListener('click', ()=>{
+    const next = nextHealthAction();
+    healthSubView = next && next.type==='vaccine' ? 'vaccinations' : 'appointments';
+    renderMain();
+  });
+  const geb = document.getElementById('goExportBtn');
+  if(geb) geb.addEventListener('click', ()=>{ currentView='export'; render(); });
+  const sor = document.getElementById('signOutRow');
+  if(sor) sor.addEventListener('click', async ()=>{
+    try{ await signOutUser(); healthSubView=null; currentView='home'; }
+    catch(e){ console.error('sign out failed', e); toast('Sign out failed — try again'); }
+  });
+
+  const cbb = document.getElementById('createBackupBtn');
+  if(cbb) cbb.addEventListener('click', async ()=>{
+    downloadBackupFile();
+    const payload = buildPayload();
+    const count = Object.values(payload).reduce((sum,v)=> sum + (Array.isArray(v)?v.length:0), 0);
+    state.prefs = state.prefs||{};
+    state.prefs.lastBackupAt = new Date().toISOString();
+    state.prefs.lastBackupCount = count;
+    await saveKey('prefs', state.prefs);
+    toast('✓ Backup downloaded'); renderMain();
+  });
+  const rfi = document.getElementById('restoreFileInput');
+  if(rfi) rfi.addEventListener('change', (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev)=>{
+      let parsed;
+      try{ parsed = JSON.parse(ev.target.result); }
+      catch(err){ toast("This doesn't appear to be a valid Baby Tracker backup."); e.target.value=''; return; }
+      const v = validateBackup(parsed);
+      if(!v.ok){ toast(v.error); e.target.value=''; return; }
+      pendingRestoreData = parsed;
+      e.target.value='';
+      sheetOpen=true; sheetStep='restoreConfirm'; sheetShowTime=false; sheetShowDetails=false;
+      renderSheet();
+    };
+    reader.onerror = ()=>{ toast('The backup file appears to be damaged.'); };
+    reader.readAsText(file);
+  });
+
+  const spb = document.getElementById('saveProfileBtn');
+  if(spb) spb.addEventListener('click', async ()=>{
+    const gw = parseFloat(document.getElementById('gestWeeksInput').value);
+    const gd = parseFloat(document.getElementById('gestDaysInput').value);
+    state.profile.gestWeeks = isNaN(gw) ? null : gw;
+    state.profile.gestDays = isNaN(gd) ? null : gd;
+    state.profile.vaccineRegion = document.getElementById('vaccineRegionSelect').value;
+    await saveKey('profile', state.profile);
+    toast('Profile saved'); renderMain();
+  });
+  document.querySelectorAll('#themeSeg [data-theme-choice]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      state.prefs = state.prefs||{};
+      state.prefs.theme = b.dataset.themeChoice;
+      await saveKey('prefs', state.prefs);
+      applyTheme();
+      renderMain();
+    });
+  });
+
+  document.querySelectorAll('[data-togglevaccine]').forEach(b=>{
+    b.addEventListener('click', ()=>{ const id=b.dataset.togglevaccine; expandedVaccineId = expandedVaccineId===id?null:id; markingGivenId=null; renderMain(); });
+  });
+  document.querySelectorAll('[data-vaction]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id=b.dataset.id, action=b.dataset.vaction;
+      const v = state.vaccines.find(x=>x.id===id);
+      if(!v) return;
+      if(action==='given'){ markingGivenId=id; expandedVaccineId=null; renderMain(); return; }
+      if(action==='na'){ v.notApplicable=true; await saveKey('vaccines', state.vaccines); toast('Marked not applicable'); expandedVaccineId=null; renderMain(); return; }
+      if(action==='undo-na'){ v.notApplicable=false; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
+      if(action==='undo-given'){ v.givenDate=null; v.provider=''; v.batch=''; v.reaction=''; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
+      if(action==='hide'){ v.hidden=true; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
+      if(action==='unhide'){ v.hidden=false; await saveKey('vaccines', state.vaccines); expandedVaccineId=null; renderMain(); return; }
+      if(action==='delete'){ state.vaccines = state.vaccines.filter(x=>x.id!==id); await saveKey('vaccines', state.vaccines); toast('Deleted'); expandedVaccineId=null; renderMain(); return; }
+    });
+  });
+  document.querySelectorAll('[data-confirmgiven]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id=b.dataset.confirmgiven;
+      const v = state.vaccines.find(x=>x.id===id);
+      if(!v) return;
+      const dateVal = document.getElementById(`gvDate-${id}`).value;
+      v.givenDate = dateVal ? new Date(dateVal).toISOString() : new Date().toISOString();
+      v.provider = document.getElementById(`gvProvider-${id}`).value.trim();
+      v.batch = document.getElementById(`gvBatch-${id}`).value.trim();
+      v.reaction = document.getElementById(`gvReaction-${id}`).value.trim();
+      await saveKey('vaccines', state.vaccines);
+      toast('Marked as given ✓'); markingGivenId=null; renderMain();
+    });
+  });
+  const thv = document.getElementById('toggleHiddenVac');
+  if(thv) thv.addEventListener('click', ()=>{ showHiddenVaccines=!showHiddenVaccines; renderMain(); });
+  const ldb = document.getElementById('loadDefaults');
+  if(ldb) ldb.addEventListener('click', async ()=>{
+    const region = state.profile.vaccineRegion || 'generic';
+    const schedule = VACCINE_SCHEDULES[region] || VACCINE_SCHEDULES.generic;
+    const existing = new Set(state.vaccines.map(v=>v.name+'|'+(v.dose||'')));
+    const additions = schedule.items.filter(v=>!existing.has(v.name+'|'+(v.dose||''))).map(v=>({id:uid(), name:v.name, dose:v.dose||'', dueMonths:v.dueMonths, givenDate:null}));
+    state.vaccines = state.vaccines.concat(additions);
+    await saveKey('vaccines', state.vaccines);
+    toast('Schedule loaded'); renderMain();
+  });
+  const svb = document.getElementById('saveVac');
+  if(svb) svb.addEventListener('click', async ()=>{
+    const name = document.getElementById('vacName').value.trim();
+    const dose = document.getElementById('vacDose').value.trim();
+    const due = parseFloat(document.getElementById('vacDue').value);
+    if(!name){ toast('Enter a vaccine name'); return; }
+    state.vaccines.push({id:uid(), name, dose, dueMonths: isNaN(due)?0:due, givenDate:null});
+    await saveKey('vaccines', state.vaccines);
+    toast('Vaccine added 💉'); renderMain();
+  });
+
+  const stb = document.getElementById('saveTempBtn');
+  if(stb) stb.addEventListener('click', async ()=>{
+    const val = parseFloat(document.getElementById('tempVal').value);
+    const date = document.getElementById('tempDate').value;
+    const method = document.getElementById('tempMethod').value;
+    const note = document.getElementById('tempNote').value.trim();
+    if(!val || !date){ toast('Enter a temperature and time'); return; }
+    currentTempMethod = method;
+    state.prefs = state.prefs||{}; state.prefs.lastTempMethod = method;
+    state.temperatures.push({id:uid(), tempC:val, method, date:new Date(date).toISOString(), note});
+    await saveKey('temperatures', state.temperatures);
+    toast('Temperature logged 🌡️'); renderMain();
+  });
+
+  const shb = document.getElementById('saveHealthBtn');
+  if(shb) shb.addEventListener('click', async ()=>{
+    const cat = document.getElementById('healthCatSelect').value;
+    const title = document.getElementById('healthTitle').value.trim();
+    const date = document.getElementById('healthDate').value;
+    const details = document.getElementById('healthDetails').value.trim();
+    if(!title || !date){ toast('Enter a title and time'); return; }
+    currentHealthCat = cat;
+    state.prefs = state.prefs||{}; state.prefs.lastHealthCat = cat;
+    state.healthRecords.push({id:uid(), category:cat, title, date:new Date(date).toISOString(), details});
+    await saveKey('healthRecords', state.healthRecords);
+    toast('Health record saved 📋'); renderMain();
+  });
+
+  const sab = document.getElementById('saveAppt');
+  if(sab) sab.addEventListener('click', async ()=>{
+    const title = document.getElementById('apptTitle').value.trim();
+    const date = document.getElementById('apptDate').value;
+    const note = document.getElementById('apptNote').value.trim();
+    if(!title || !date){ toast('Enter a title and date'); return; }
+    state.appointments.push({id:uid(), title, date:new Date(date).toISOString(), note, status:'upcoming', questions:[]});
+    await saveKey('appointments', state.appointments);
+    toast('Appointment saved 🗓️'); renderMain();
+  });
+  document.querySelectorAll('[data-toggleappt]').forEach(b=>{
+    b.addEventListener('click', ()=>{ const id=b.dataset.toggleappt; expandedApptId = expandedApptId===id?null:id; completingApptId=null; renderMain(); });
+  });
+  document.querySelectorAll('[data-apptaction]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id=b.dataset.id, action=b.dataset.apptaction;
+      const a = state.appointments.find(x=>x.id===id);
+      if(!a) return;
+      if(action==='complete'){ completingApptId=id; expandedApptId=null; renderMain(); return; }
+      if(action==='cancel'){ a.status='cancelled'; await saveKey('appointments', state.appointments); toast('Marked cancelled'); expandedApptId=null; renderMain(); return; }
+      if(action==='delete'){ state.appointments = state.appointments.filter(x=>x.id!==id); await saveKey('appointments', state.appointments); toast('Deleted'); expandedApptId=null; renderMain(); return; }
+    });
+  });
+  document.querySelectorAll('[data-addq]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const apptId = b.dataset.addq;
+      const input = document.getElementById(`newQ-${apptId}`);
+      const text = input.value.trim();
+      if(!text) return;
+      const a = state.appointments.find(x=>x.id===apptId);
+      a.questions = a.questions||[];
+      a.questions.push({id:uid(), text, checked:false});
+      await saveKey('appointments', state.appointments);
+      renderMain();
+    });
+  });
+  document.querySelectorAll('[data-qcheck]').forEach(cb=>{
+    cb.addEventListener('change', async ()=>{
+      const [apptId, qId] = cb.dataset.qcheck.split(':');
+      const a = state.appointments.find(x=>x.id===apptId);
+      const q = a.questions.find(x=>x.id===qId);
+      if(q){ q.checked = cb.checked; await saveKey('appointments', state.appointments); }
+    });
+  });
+  document.querySelectorAll('[data-confirmcomplete]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id = b.dataset.confirmcomplete;
+      const a = state.appointments.find(x=>x.id===id);
+      if(!a) return;
+      const w = parseFloat(document.getElementById(`compWeight-${id}`).value);
+      const l = parseFloat(document.getElementById(`compLength-${id}`).value);
+      const h = parseFloat(document.getElementById(`compHc-${id}`).value);
+      const notes = document.getElementById(`compNotes-${id}`).value.trim();
+      const followup = document.getElementById(`compFollowup-${id}`).checked;
+      if(!isNaN(w)) state.measurements.push({id:uid(), type:'weight', date:a.date, value:w, note:'From appointment: '+a.title});
+      if(!isNaN(l)) state.measurements.push({id:uid(), type:'length', date:a.date, value:l, note:'From appointment: '+a.title});
+      if(!isNaN(h)) state.measurements.push({id:uid(), type:'hc', date:a.date, value:h, note:'From appointment: '+a.title});
+      dueVaccinesNearDate(a.date).forEach(v=>{
+        const cb = document.getElementById(`compVac-${id}-${v.id}`);
+        if(cb && cb.checked){ const vv = state.vaccines.find(x=>x.id===v.id); if(vv) vv.givenDate = a.date; }
+      });
+      a.status='completed'; a.completedNotes=notes; a.followUpNeeded=followup;
+      await saveKey('measurements', state.measurements);
+      await saveKey('vaccines', state.vaccines);
+      await saveKey('appointments', state.appointments);
+      toast(followup ? 'Visit completed ✓ — add a follow-up below' : 'Visit completed ✓');
+      completingApptId=null; renderMain();
+    });
+  });
+  bindDeletes();
+}
+
+/* ---------------- Moments (photo gallery, grouped by age) ---------------- */
+function readAndCompressImage(file, maxDim, quality){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = e=>{
+      const img = new Image();
+      img.onload = ()=>{
+        let w=img.width, h=img.height;
+        if(w>h){ if(w>maxDim){ h=Math.round(h*maxDim/w); w=maxDim; } }
+        else { if(h>maxDim){ w=Math.round(w*maxDim/h); h=maxDim; } }
+        const canvas = document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+function ageAtDate(birthISO, atISO){
+  const birth = new Date(birthISO), at = new Date(atISO);
+  let ms = at-birth; if(ms<0) ms=0;
+  const days = Math.floor(ms/86400000);
+  const weeks = Math.floor(days/7), remDays = days%7;
+  const months = (at.getFullYear()-birth.getFullYear())*12 + (at.getMonth()-birth.getMonth()) - (at.getDate()<birth.getDate()?1:0);
+  return { weeks, remDays, months: Math.max(0,months) };
+}
+function momentAgeLabel(dateISO){
+  const a = ageAtDate(state.profile.birthDate, dateISO);
+  return a.weeks<12 ? `${a.weeks}w ${a.remDays}d old` : `${a.months} mo old`;
+}
+function momentMonthLabel(n){ return n===0 ? 'Newborn' : n===1 ? '1 month' : `${n} months`; }
+
+function renderMilestones(){
+  const list = state.milestones.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const featured = list[0];
+  const rest = list.slice(1);
+  const groups = {};
+  const order = [];
+  rest.forEach(m=>{
+    const bucket = ageAtDate(state.profile.birthDate, m.date).months;
+    if(!groups[bucket]){ groups[bucket]=[]; order.push(bucket); }
+    groups[bucket].push(m);
+  });
+  return `
+    <div class="hero" style="display:flex;align-items:baseline;justify-content:space-between;">
+      <div><h1>Moments</h1><p>A private journal of everything worth remembering.</p></div>
+    </div>
+    <button class="ql-link" id="addMomentLink" style="padding:0 0 14px;">+ Add moment</button>
+    ${featured ? `
+    <div style="position:relative;border-radius:var(--radius-major);overflow:hidden;margin-bottom:22px;background:var(--surface-muted);box-shadow:var(--shadow-2);">
+      <button class="del-x" data-id="${featured.id}" data-kind="milestone" style="z-index:2;">✕</button>
+      ${featured.photo ? `<img src="${featured.photo}" style="width:100%;height:280px;object-fit:cover;display:block;">` : `<div style="width:100%;height:170px;display:flex;align-items:center;justify-content:center;font-size:46px;">⭐</div>`}
+      <div style="padding:16px 18px 18px;">
+        <div style="font-family:'Baloo 2',cursive;font-size:21px;font-weight:700;color:var(--ink);">${escapeHtml(featured.title)}</div>
+        <div class="meta-text" style="margin-top:4px;font-size:12px;">${fmtDateFull(featured.date)} · ${momentAgeLabel(featured.date)}</div>
+        ${featured.note ? `<div class="support-text" style="margin-top:8px;">${escapeHtml(featured.note)}</div>` : ''}
+      </div>
+    </div>` : `<div class="empty">No moments saved yet.<br>Capture your first memory 🌱</div>`}
+
+    ${order.length ? order.map(bucket=>`
+      <div style="margin-bottom:6px;">
+        <div class="section-header" style="margin-top:16px;">${momentMonthLabel(bucket)}</div>
+        <div class="gallery-grid">
+          ${groups[bucket].map(m=>`
+            <div class="gallery-card">
+              <button class="del-x" data-id="${m.id}" data-kind="milestone">✕</button>
+              ${m.photo ? `<img src="${m.photo}" alt="">` : `<div class="ph">⭐</div>`}
+              <div class="cap">
+                <div class="t">${escapeHtml(m.title)}</div>
+                <div class="s">${fmtDate(m.date)} · ${momentAgeLabel(m.date)}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('') : ''}
+  `;
+}
+function bindMilestones(){
+  const addLink = document.getElementById('addMomentLink');
+  if(addLink) addLink.addEventListener('click', ()=> openSheet('moment'));
+  bindDeletes();
+}
+
+const DELETE_MAP = {
+  measurement: {arr:'measurements', key:'measurements'},
+  feed: {arr:'feeds', key:'feeds'},
+  sleep: {arr:'sleeps', key:'sleep'},
+  milestone: {arr:'milestones', key:'milestones'},
+  vaccine: {arr:'vaccines', key:'vaccines'},
+  appointment: {arr:'appointments', key:'appointments'},
+  nappy: {arr:'nappies', key:'nappies'},
+  temperature: {arr:'temperatures', key:'temperatures'},
+  healthRecord: {arr:'healthRecords', key:'healthRecords'}
+};
+function bindDeletes(){
+  document.querySelectorAll('button.del, button.del-x').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id=b.dataset.id, kind=b.dataset.kind;
+      const m = DELETE_MAP[kind];
+      if(!m) return;
+      const idx = state[m.arr].findIndex(x=>x.id===id);
+      if(idx===-1) return;
+      const removed = state[m.arr][idx];
+      state[m.arr].splice(idx,1);
+      await saveKey(m.key, state[m.arr]);
+      renderMain();
+      showUndoToast('Deleted', async ()=>{
+        state[m.arr].splice(idx,0,removed);
+        await saveKey(m.key, state[m.arr]);
+        renderMain();
+      });
+    });
+  });
+}
+
+/* ---------------- Onboarding ---------------- */
+function renderOnboard(){
+  return `
+    <div class="onboard">
+      <div class="mark">🌷🍼🌙</div>
+      <h1>Let's set up her growth log!</h1>
+      <p class="sub">This stays synced between both of your phones. Add her details to get started.</p>
+      <label>Baby's name</label>
+      <input type="text" id="obName" placeholder="e.g. Amara">
+      <label>Date of birth</label>
+      <input type="date" id="obDob" value="${todayDateInput()}">
+      <button class="btn" id="obSave">Start tracking 🌱</button>
+      <p class="note">Growth percentiles use WHO standards for girls. Data syncs automatically across every device that opens this app — no login needed. Anyone with the link can view and add entries, so only share it with people you trust with her data.</p>
+    </div>
+  `;
+}
+function bindOnboard(){
+  document.getElementById('obSave').addEventListener('click', async ()=>{
+    const name = document.getElementById('obName').value.trim();
+    const dob = document.getElementById('obDob').value;
+    if(!name || !dob){ alert('Please enter a name and date of birth.'); return; }
+    state.profile = {name, sex:'female', birthDate:new Date(dob).toISOString()};
+    await saveKey('profile', state.profile);
+    render();
+  });
+}
+
+/* ---------------- Boot ---------------- */
+function resolveTheme(){
+  const pref = state.prefs && state.prefs.theme;
+  if(pref==='light' || pref==='dark') return pref;
+  return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+}
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', resolveTheme());
+}
+function isDarkMode(){ return document.documentElement.getAttribute('data-theme')==='dark'; }
+if(window.matchMedia){
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{
+    if(!(state.prefs && (state.prefs.theme==='light' || state.prefs.theme==='dark'))){
+      applyTheme();
+      if(document.getElementById('main')) renderMain();
+    }
+  });
+}
+let bootStallTimer = null;
+function boot(){
+  applyTheme();
+  authReady = false; authUser = null; initialDataLoaded = false;
+  const app = document.getElementById('app');
+  app.innerHTML = renderLoadingScreen();
+
+  clearTimeout(bootStallTimer);
+  bootStallTimer = setTimeout(()=>{
+    if(!authReady){
+      app.innerHTML = renderStartupError("This is taking longer than expected — Firebase may not have responded.");
+      bindStartupError();
+    }
+  }, 9000);
+
+  try{
+    initFirebase();
+  }catch(e){
+    console.error('Firebase init failed', e);
+    clearTimeout(bootStallTimer);
+    app.innerHTML = renderStartupError(e.message || 'Could not start Firebase.');
+    bindStartupError();
+    return;
+  }
+
+  try{
+    fbAuth.onAuthStateChanged(user=>{
+      clearTimeout(bootStallTimer);
+      authReady = true;
+      authUser = user;
+      if(user){
+        initialDataLoaded = false;
+        render(); /* loading while first snapshot arrives */
+        startRealtimeSync();
+      } else {
+        stopRealtimeSync();
+        initialDataLoaded = false;
+        applyRemote({}); /* clear in-memory data on sign-out */
+        render(); /* login screen */
+      }
+    }, e=>{
+      console.error('Auth state error', e);
+      clearTimeout(bootStallTimer);
+      app.innerHTML = renderStartupError(friendlyAuthError(e));
+      bindStartupError();
+    });
+  }catch(e){
+    console.error('onAuthStateChanged threw', e);
+    clearTimeout(bootStallTimer);
+    app.innerHTML = renderStartupError(e.message || 'Could not check sign-in status.');
+    bindStartupError();
+  }
+}
+function bindStartupError(){
+  const btn = document.getElementById('retryBootBtn');
+  if(btn) btn.addEventListener('click', ()=> location.reload());
+}
+boot();
+</script>
+</body>
+</html>
