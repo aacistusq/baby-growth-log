@@ -569,6 +569,25 @@ const firebaseConfig = {
   appId: "1:747639865841:web:2aad3330b75c3215d8c450"
 };
 let fbAuth = null, fbDb = null, authUser = null, authReady = false;
+const PARENT_PROFILES = {
+  'aacist7@gmail.com': 'Papa',
+  'ishi.g@hotmail.com': 'Mummy'
+};
+/* Presentation metadata only — never used for authorization. Security
+   continues to rely on the authenticated Firebase user and Firestore rules;
+   this purely maps that same authenticated email to a display role. */
+function getCurrentParentProfile(){
+  const email = authUser && authUser.email ? authUser.email.trim().toLowerCase() : null;
+  if(email && PARENT_PROFILES[email]) return { role: PARENT_PROFILES[email], email };
+  if(authUser && authUser.displayName) return { role: authUser.displayName, email };
+  return { role: null, email };
+}
+function timeAwareGreeting(role){
+  if(!role) return 'Hi there';
+  const hour = new Date().getHours();
+  const part = hour<12 ? 'morning' : hour<17 ? 'afternoon' : 'evening';
+  return `Good ${part}, ${role}`;
+}
 let unsubscribeSnapshot = null;
 let initialDataLoaded = false;
 function initFirebase(){
@@ -1233,7 +1252,8 @@ function icon(name, size){
     calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
     shield: '<path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3z"/>',
     settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>',
-    ask: '<path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>'
+    ask: '<path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>',
+    care: '<path d="M12 21s-7.5-4.6-10-9.2C.4 8.2 2 4.5 5.5 4c2-.3 3.7.7 6.5 3 2.8-2.3 4.5-3.3 6.5-3 3.5.5 5.1 4.2 3.5 7.8C19.5 16.4 12 21 12 21z"/>'
   };
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
@@ -1358,7 +1378,7 @@ function render(){
     <main id="main"></main>
     <nav class="bottom">
       <button data-view="home" class="${currentView==='home'?'active':''}">${icon('home')}Home</button>
-      <button data-view="timeline" class="${currentView==='timeline'?'active':''}">${icon('timeline')}Timeline</button>
+      <button data-view="care" class="${currentView==='care'?'active':''}">${icon('care')}Care</button>
       <button data-view="growth" class="${currentView==='growth'?'active':''}">${icon('growth')}Growth</button>
       <button data-view="health" class="${currentView==='health'?'active':''}">${icon('health')}Health</button>
       <button data-view="milestones" class="${currentView==='milestones'?'active':''}">${icon('star')}Moments</button>
@@ -1391,7 +1411,6 @@ function renderMain(){
   else if(currentView==='timeline') { main.innerHTML = renderTimeline(); bindTimeline(); }
   else if(currentView==='export') { main.innerHTML = renderExport(); bindExport(); }
   else if(currentView==='settings') { main.innerHTML = renderSettings(); bindSettings(); }
-  else if(currentView==='rhythm') { main.innerHTML = renderRhythmView(); bindRhythmView(); }
   else if(currentView==='brief') { main.innerHTML = renderDailyBrief(); bindDailyBrief(); }
   else if(currentView==='recap') { main.innerHTML = renderMonthlyRecap(); bindMonthlyRecap(); }
   else if(currentView==='ask') { main.innerHTML = renderAskView(); bindAskView(); }
@@ -2324,8 +2343,10 @@ function renderHome(){
   const activeSleepMins = state.activeSleep ? Math.max(0, Math.floor((Date.now()-new Date(state.activeSleep.startAt).getTime())/60000)) : 0;
   const activeSleepLong = activeSleepMins >= 480;
   const topInsight = generateSmartInsights().find(i=> i.importance>=40 && i.id!=='stable-summary') || null;
+  const parent = getCurrentParentProfile();
 
   return `
+    <div class="meta-text" style="margin:-4px 0 12px;font-weight:600;">${timeAwareGreeting(parent.role)}</div>
     ${tempBanner}
     <div class="row-item" id="goAskLink" style="cursor:pointer;">
       <div class="main" style="font-weight:600;display:flex;align-items:center;gap:8px;">${icon('ask',16)}Ask ${escapeHtml(state.profile.name)}</div>
@@ -2379,8 +2400,8 @@ function renderHome(){
 
     <div class="section-header">Care</div>
     <div class="row-item" id="careRowLink" style="cursor:pointer;">
-      <div class="main" style="font-weight:600;">Feeding, sleep &amp; nappies</div>
-      <div class="meta-text">Summaries &amp; insights →</div>
+      <div class="main" style="font-weight:600;">${fmtDuration(ds.totalSleepMin)} sleep today · ${ds.feedCount} feed${ds.feedCount===1?'':'s'} · ${ds.nappies.wet} wet nappies</div>
+      <div class="meta-text">Open Care →</div>
     </div>
     ${topInsight ? `
     <div class="card" id="homeInsightCard" style="cursor:pointer;margin-top:10px;">
@@ -3457,7 +3478,7 @@ function compareToPreviousWeek(metric){
    deterministic JS against the real records, reusing the same aggregation
    functions used everywhere else in the app, and the final answer text is
    built entirely from those computed values via string templates. */
-const ASK_KNOWN_TYPES = ['lastEvent','countInRange','totalInRange','maxInRange','minInRange','bestDay','growthChange','weekCompare','dayShowAll','breastSide','nextEvent','listGiven','healthOverview','unanswerable','unknown'];
+const ASK_KNOWN_TYPES = ['lastEvent','countInRange','totalInRange','maxInRange','minInRange','bestDay','growthChange','weekCompare','dayShowAll','breastSide','nextEvent','listGiven','healthOverview','nextWeighIn','previousMeasurement','measurementOnDate','vaccineOverview','sleepOverview','feedOverview','nappyOverview','unanswerable','unknown'];
 const ASK_MEDICAL_PATTERN = /\b(enough milk|getting enough|low (milk )?supply|milk supply|reflux|dehydrat|overtired|is (this|that|she|it) normal|should i (be )?worry|is she (sick|ill|okay|ok)|diagnos|colic|allerg|intoleran|teething|constipat|underweight|overweight|failure to thrive)\b/i;
 function looksLikeMedicalQuestion(q){ return ASK_MEDICAL_PATTERN.test(q); }
 function resolveAskRange(range){
@@ -3653,6 +3674,53 @@ function executeListGiven(intent){
 function executeHealthOverview(){
   return { answer:"I can show her logged temperature, vaccines, appointments, or health notes — try asking about one of those specifically.", evidence:null };
 }
+/* Uses the same authoritative recent-trend projection already built for the
+   Growth screen — Ask Keshavi never recalculates this itself. */
+function executeNextWeighIn(){
+  const proj = projectNextWeighIn();
+  if(!proj) return { answer:"No weight measurements logged yet to plan a next weigh-in from.", evidence:null };
+  let answer = `Her next weigh-in is planned for ${fmtDate(proj.nextDate)}.`;
+  if(!proj.insufficient) answer += ` Based on her recent growth pace, the current projection is approximately ~${proj.projectedVal.toFixed(2)} kg.`;
+  return { answer, evidence:null };
+}
+function executePreviousMeasurement(intent){
+  const type = intent.measure||'weight';
+  const list = state.measurements.filter(m=>m.type===type).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  if(list.length<2) return { answer:`Only one ${labelType(type).toLowerCase()} measurement has been logged so far.`, evidence:null };
+  const prev = list[1];
+  return { answer:`Before that, her ${labelType(type).toLowerCase()} was ${prev.value}${unitFor(type)}, recorded on ${fmtDate(prev.date)}.`, evidence:null };
+}
+function executeMeasurementOnDate(intent){
+  const type = intent.measure||'weight';
+  const m = state.measurements.filter(x=>x.type===type && sydDateKey(x.date)===intent.date)[0];
+  if(!m) return { answer:`No ${labelType(type).toLowerCase()} measurement logged on ${fmtDateFull(intent.date+'T12:00:00')}.`, evidence:null };
+  return { answer:`Her ${labelType(type).toLowerCase()} on ${fmtDateFull(intent.date+'T12:00:00')} was ${m.value}${unitFor(type)}.`, evidence:null };
+}
+function executeVaccineOverview(){
+  const given = state.vaccines.filter(v=>v.givenDate);
+  const nextDue = state.vaccines.filter(v=>!v.givenDate && !v.notApplicable && !v.hidden).map(v=>({v,due:vaccineDueDate(v)})).sort((a,b)=>a.due-b.due)[0];
+  let answer = `She has received ${given.length} recorded vaccine${given.length===1?'':'s'}.`;
+  if(nextDue) answer += ` Her next scheduled vaccine is ${nextDue.v.name}${nextDue.v.dose?' ('+nextDue.v.dose+')':''}, around ${nextDue.due?fmtDate(nextDue.due.toISOString()):nextDue.v.dueMonths+' months'}.`;
+  return { answer, evidence: given.length ? given.map(v=>({label:fmtDate(v.givenDate), value:v.name+(v.dose?' ('+v.dose+')':'')})) : null };
+}
+function executeSleepOverview(){
+  const stateLine = state.activeSleep
+    ? `Sleeping now — started ${fmtTime(state.activeSleep.startAt)}.`
+    : (()=>{ const ls=lastSleepInfo(); return ls ? `Awake · last sleep ${ls.sub.toLowerCase()}.` : ''; })();
+  const ds = dailySummary();
+  const totalLine = `${fmtDuration(ds.totalSleepMin)} logged today across ${ds.sleepPeriods} period${ds.sleepPeriods===1?'':'s'}.`;
+  return { answer: `${stateLine} ${totalLine}`.trim(), evidence:null };
+}
+function executeFeedOverview(){
+  const ds = dailySummary();
+  const lastFeedList = state.feeds.map(normalizeFeed).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const lastLine = lastFeedList.length ? ` Last feed ${timeAgo(lastFeedList[0].date)}.` : '';
+  return { answer: `${ds.feedCount} feed${ds.feedCount===1?'':'s'} logged today.${lastLine}`, evidence:null };
+}
+function executeNappyOverview(){
+  const n = getDailyNappyStats();
+  return { answer: `${n.changeCount} nappy change${n.changeCount===1?'':'s'} today — ${n.wet} wet, ${n.dirty} dirty.`, evidence:null };
+}
 function executeBestDay(intent){
   const keys = get7DayKeys(0), todayKey = sydDateKey();
   const fmtDay = k=> new Date(k+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'short',timeZone:APP_TZ});
@@ -3733,6 +3801,13 @@ function executeAskIntent(intent){
     case 'nextEvent': return executeNextEvent(intent);
     case 'listGiven': return executeListGiven(intent);
     case 'healthOverview': return executeHealthOverview();
+    case 'nextWeighIn': return executeNextWeighIn();
+    case 'previousMeasurement': return executePreviousMeasurement(intent);
+    case 'measurementOnDate': return executeMeasurementOnDate(intent);
+    case 'vaccineOverview': return executeVaccineOverview();
+    case 'sleepOverview': return executeSleepOverview();
+    case 'feedOverview': return executeFeedOverview();
+    case 'nappyOverview': return executeNappyOverview();
     case 'unanswerable': return executeUnanswerable();
     default: return executeUnknown();
   }
@@ -3798,7 +3873,19 @@ const ASK_DOMAINS = {
   health: ['health','symptom','medication'],
   moments: ['moment','moments','photo','photos','milestone']
 };
-/* ---- Operation synonym maps ---- */
+/* ---- Explicit high-precedence signal patterns. These are checked before
+   generic operation scoring within each domain resolver, because a specific
+   phrase like "how many hours" or "already had" must always win over a
+   generic word like "how many" or the domain's default operation — the
+   generic scored operation below exists only as a fallback signal, never
+   as something that can override these. */
+const ASK_DURATION_PATTERN = /\bhours?\b|\bhrs?\b|\bminutes?\b|\bmins?\b|\bhow long\b|\bduration\b|\btotal time\b/;
+const ASK_FUTURE_PATTERN = /\bnext\b|\bupcoming\b|\bdue\b|\bcoming up\b|\bscheduled\b|\bplanned\b|\bwhen (do|should|will) we\b|\bproject/;
+const ASK_GIVEN_PATTERN = /\balready\b|\bhas had\b|\bhad\b|\bdone\b|\bgot\b|\breceived\b|\bgiven\b|\bcompleted\b|\badministered\b/;
+const ASK_PREVIOUS_PATTERN = /\bprevious\b|\bbefore that\b|\bbefore\b|\blast one\b/;
+/* ---- Operation synonym maps — a weaker fallback signal, used only when
+   none of the explicit high-precedence patterns above have already decided
+   the operation for that domain. ---- */
 const ASK_OPERATIONS = {
   latest: ['current','latest','currently','now'],
   count: ['how many','number of','count','times'],
@@ -3838,6 +3925,11 @@ function fuzzyWordMatch(word, target){
   if(target.length<5 || Math.abs(word.length-target.length)>1) return false;
   return levenshtein(word,target)<=1;
 }
+/* Simple English plural stripping — short domain words ("shot","wet") were
+   only ever listed singular, so a plural like "shots"/"wets" fell through
+   both exact and fuzzy matching (fuzzy is deliberately disabled below
+   5 characters to avoid false positives). Checked ahead of fuzzy matching. */
+function stripTrailingS(w){ return w.length>3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0,-1) : w; }
 function scoreDomains(norm){
   const tokens = norm.split(' ').filter(Boolean);
   const scores = {};
@@ -3845,7 +3937,7 @@ function scoreDomains(norm){
     let score = 0;
     words.forEach(w=>{
       if(w.includes(' ')){ if(norm.includes(w)) score += 3; return; }
-      if(tokens.some(t=>fuzzyWordMatch(t,w))) score += 2;
+      if(tokens.some(t=> t===w || stripTrailingS(t)===w || fuzzyWordMatch(t,w))) score += 2;
     });
     if(score>0) scores[domain]=score;
   });
@@ -3880,49 +3972,82 @@ const ASK_DOMAIN_LABELS = {weight:'Weight', length:'Length', hc:'Head circumfere
    "understanding the question" and "running the deterministic query", so
    nothing about how an answer is calculated changes based on how the
    question was phrased. */
+/* Precedence-ordered per domain: an explicit, specific signal (a duration
+   unit, "next", "already had") always wins over a generic operation word or
+   the domain's bare-question default — never the other way around. Each
+   domain resolver is read top-to-bottom as its own priority list. */
 function buildIntentFromDomainOp(domain, operation, range, norm){
   norm = norm || '';
+
   if(domain==='weight'||domain==='length'||domain==='hc'){
-    if(operation==='change') return {type:'growthChange', measure:domain};
+    if(domain==='weight' && ASK_FUTURE_PATTERN.test(norm)) return {type:'nextWeighIn'};
+    if(/\bsince birth\b|\bfrom birth\b|\bgained\b|\bgain\b|\bhow much.*(gained|since)\b|\bchang/.test(norm) || operation==='change') return {type:'growthChange', measure:domain};
+    if(range && range.kind==='date') return {type:'measurementOnDate', measure:domain, date:range.date};
+    if(ASK_PREVIOUS_PATTERN.test(norm)) return {type:'previousMeasurement', measure:domain};
     return {type:'lastEvent', metric:'measurement', subtype:domain};
   }
-  if(domain==='growth') return {type:'growthChange', measure:'weight'};
+  if(domain==='growth'){
+    if(/\bpercentile\b/.test(norm) && !/\bchang|\bgain|\bsince birth\b/.test(norm)) return {type:'lastEvent', metric:'measurement', subtype:'weight'};
+    return {type:'growthChange', measure:'weight'};
+  }
+
   if(domain==='sleep'){
     if(/\b(is she |still )?(sleeping|asleep)\b/.test(norm) && /\bnow\b|\bcurrently\b|\bstill\b/.test(norm)) return {type:'lastEvent', metric:'sleep'};
-    if(operation==='max') return {type:'maxInRange', metric:'sleep', range: range||{kind:'thisWeek'}};
-    if(operation==='min') return {type:'minInRange', metric:'sleep', range: range||{kind:'thisWeek'}};
-    if(operation==='count') return {type:'countInRange', metric:'sleep', range: range||{kind:'today'}};
-    if(operation==='latest' || /^when\b/.test(norm)){
+    if(ASK_DURATION_PATTERN.test(norm)) return {type:'totalInRange', metric:'sleep', range: range||{kind:'today'}};
+    if(/\blongest\b/.test(norm)) return {type:'maxInRange', metric:'sleep', range: range||{kind:'thisWeek'}};
+    if(/\bshortest\b/.test(norm)) return {type:'minInRange', metric:'sleep', range: range||{kind:'thisWeek'}};
+    if(/\bhow many\b/.test(norm) && /\bnaps?\b|\bsleeps\b|\bsessions?\b|\btimes\b/.test(norm)) return {type:'countInRange', metric:'sleep', range: range||{kind:'today'}};
+    if(/^when\b/.test(norm)){
       const startOrEnd = /\bgo to sleep\b|\bfell asleep\b|\bfall asleep\b|\bwent to sleep\b/.test(norm) ? 'start' : 'end';
       return {type:'lastEvent', metric:'sleep', startOrEnd};
     }
+    if(!range && !operation) return {type:'sleepOverview'};
     return {type:'totalInRange', metric:'sleep', range: range||{kind:'today'}};
   }
+
   if(domain==='feed'){
-    if(/\bbreast\b/.test(norm) && /\bleft\b|\bright\b/.test(norm)) return {type:'breastSide', mode: range?'compare':'last', range: range||{kind:'thisWeek'}};
-    if(operation==='latest' || /^when\b|\blast feed\b/.test(norm)) return {type:'lastEvent', metric:'feed'};
-    if(operation==='max' || /\bwhich day\b/.test(norm)) return {type:'bestDay', metric:'feed'};
-    if(operation==='total') return {type:'totalInRange', metric:'feed', range: range||{kind:'today'}};
+    if(/\bwhich breast\b|\bwhich side\b/.test(norm)) return {type:'breastSide', mode:'last'};
+    if(/\bbreast\b/.test(norm) && /\bleft\b/.test(norm) && /\bright\b/.test(norm)){
+      const wantsCompare = range || /\bmore\b|\bless\b|\bmost\b/.test(norm);
+      return {type:'breastSide', mode: wantsCompare?'compare':'last', range: range||{kind:'thisWeek'}};
+    }
+    if(ASK_DURATION_PATTERN.test(norm) && /\bnurs|\bbreastfe/.test(norm)) return {type:'totalInRange', metric:'feed', range: range||{kind:'today'}};
+    if(/\bhow long since\b|\bsince (her |the )?last feed\b|\btime since\b/.test(norm)) return {type:'lastEvent', metric:'feed'};
+    if(/^when\b|\blast feed\b/.test(norm)) return {type:'lastEvent', metric:'feed'};
+    if(/\bwhich day\b/.test(norm)) return {type:'bestDay', metric:'feed'};
+    if(ASK_DURATION_PATTERN.test(norm)) return {type:'totalInRange', metric:'feed', range: range||{kind:'today'}};
+    if(!range && !operation && !/\bhow many\b/.test(norm)) return {type:'feedOverview'};
     const subtype = /\bbreastfeed|\bnurs/.test(norm) ? 'breastfeeding' : /\bformula\b/.test(norm) ? 'formula' : null;
     return {type:'countInRange', metric:'feed', range: range||{kind:'today'}, subtype};
   }
+
   if(domain==='nappy'){
     const subtype = detectNappySubtype(norm);
-    if(operation==='latest' || /^when\b|\bhas she\b/.test(norm)) return {type:'lastEvent', metric:'nappy', subtype};
-    if(operation==='max' || /\bwhich day\b/.test(norm)) return {type:'bestDay', metric:'nappy'};
+    if(/^when\b|\bhas she\b|\blast\b/.test(norm)) return {type:'lastEvent', metric:'nappy', subtype};
+    if(/\bwhich day\b/.test(norm)) return {type:'bestDay', metric:'nappy'};
+    if(!range && !subtype && !/\bhow many\b/.test(norm)) return {type:'nappyOverview'};
     return {type:'countInRange', metric:'nappy', subtype, range: range||{kind:'today'}};
   }
+
   if(domain==='temperature') return {type:'lastEvent', metric:'temperature'};
+
   if(domain==='vaccine'){
-    if(/\bwhat vaccines\b|\bwhich vaccines\b|\ball vaccines\b|\bvaccines has she had\b/.test(norm)) return {type:'listGiven', metric:'vaccine'};
     const nameHint = extractVaccineNameHint(norm);
-    if(nameHint || operation==='latest' || /^when did she get\b|\bwhen was\b/.test(norm)) return {type:'lastEvent', metric:'vaccine', nameHint};
-    return {type:'nextEvent', metric:'vaccine'};
+    if(nameHint && /^when\b|\bdid she (get|have)\b|\bwas she given\b/.test(norm)) return {type:'lastEvent', metric:'vaccine', nameHint};
+    /* "Already had / done / received / given" is checked before "next /
+       upcoming / due" — completion language is the more explicit, more
+       specific signal, and must never be read as a request for what's next. */
+    if(ASK_GIVEN_PATTERN.test(norm)) return {type:'listGiven', metric:'vaccine'};
+    if(ASK_FUTURE_PATTERN.test(norm)) return {type:'nextEvent', metric:'vaccine'};
+    if(nameHint) return {type:'lastEvent', metric:'vaccine', nameHint};
+    return {type:'vaccineOverview'};
   }
+
   if(domain==='appointment'){
-    if(operation==='latest' || /^when did\b|\blast appointment\b/.test(norm)) return {type:'lastEvent', metric:'appointment'};
+    if(ASK_GIVEN_PATTERN.test(norm) || /^when did\b|\blast appointment\b/.test(norm)) return {type:'lastEvent', metric:'appointment'};
     return {type:'nextEvent', metric:'appointment'};
   }
+
   if(domain==='moments') return {type:'lastEvent', metric:'moment'};
   if(domain==='health') return {type:'healthOverview'};
   return {type:'unknown'};
@@ -3956,7 +4081,10 @@ function classifyAskIntentLocal(question){
      word from the feed synonym list, so they're handled explicitly rather
      than relying on domain scoring to find them. */
   if(/\bwhich (breast|side)\b/.test(norm)) return {type:'breastSide', mode:'last'};
-  if(/\bleft\b/.test(norm) && /\bright\b/.test(norm)) return {type:'breastSide', mode: range?'compare':'last', range: range||{kind:'thisWeek'}};
+  if(/\bleft\b/.test(norm) && /\bright\b/.test(norm)){
+    const wantsCompare = range || /\bmore\b|\bless\b|\bmost\b/.test(norm);
+    return {type:'breastSide', mode: wantsCompare?'compare':'last', range: range||{kind:'thisWeek'}};
+  }
 
   /* A specific vaccine name mentioned by itself ("when did she get Hep B?")
      may not contain any generic vaccine keyword at all, so name matching is
@@ -3970,20 +4098,28 @@ function classifyAskIntentLocal(question){
   const opEntries = Object.entries(opScores).sort((a,b)=>b[1]-a[1]);
   const operation = opEntries.length ? opEntries[0][0] : null;
 
-  // one-level conversational follow-up: "and today?", "what about yesterday?", "and before that?"
-  if(/^(and|what about|and what about)\b/.test(norm) && askLastDomain){
-    if(range || /\bbefore that\b|\bprevious\b|\bearlier\b/.test(norm)){
-      return buildIntentFromDomainOp(askLastDomain, operation||askLastOperation, range, norm);
-    }
+  // conversational follow-up: "and today?", "what about yesterday?", "and before that?",
+  // "before that", "previous one", "and next" — reuses the remembered topic, and since the
+  // domain resolvers above read directly from this follow-up's own wording, a phrase like
+  // "before that" or "next" naturally resolves to the right operation for that topic.
+  const isFollowUp = /^(and|what about)\b/.test(norm) || /\bbefore that\b|\bprevious one\b/.test(norm);
+  if(isFollowUp && askLastDomain){
+    return buildIntentFromDomainOp(askLastDomain, operation||askLastOperation, range, norm);
   }
 
   const domainScores = scoreDomains(norm);
   const domainEntries = Object.entries(domainScores).sort((a,b)=>b[1]-a[1]);
 
   if(!domainEntries.length){
-    // No topic recognised at all. If a quantity operation was clearly asked
-    // for, offer a genuine clarification rather than failing silently.
-    if(operation==='total') return {type:'clarify', options:['sleep','feed'], operation, range};
+    // No topic recognised at all. "Next"/"upcoming" style words with no
+    // named topic ("Her next one?") resolve using the remembered topic if a
+    // conversation is already underway; otherwise a genuine clarification
+    // beats a silent guess.
+    if(ASK_FUTURE_PATTERN.test(norm)){
+      if(askLastDomain) return buildIntentFromDomainOp(askLastDomain, operation, range, norm);
+      return {type:'clarify', options:['weight','vaccine','appointment'], operation, range};
+    }
+    if(operation==='total') return {type:'clarify', options: (range && range.kind==='sinceBirth') ? ['weight','sleep','feed'] : ['sleep','feed'], operation, range};
     if(operation==='count') return {type:'clarify', options:['feed','nappy'], operation, range};
     if(operation==='latest') return {type:'clarify', options:['weight','sleep','feed'], operation, range};
     return {type:'unknown'};
@@ -4008,7 +4144,7 @@ const ASK_EXAMPLES = [
 ];
 let askQuestion = '', askAnswer = null, askEvidence = null, askEvidenceExpanded = false, askError = null;
 let askHistory = [];
-let askClarify = null; // {options, operation, range}
+let askClarify = null; // {options, operation, range, norm}
 function handleAskSubmit(question){
   question = (question||'').trim();
   if(!question) return;
@@ -4023,6 +4159,7 @@ function handleAskSubmit(question){
   try{
     const intentRaw = classifyAskIntentLocal(question);
     if(intentRaw && intentRaw.type==='clarify'){
+      intentRaw.norm = normalizeAskText(question);
       askClarify = intentRaw;
       renderMain();
       return;
@@ -4039,10 +4176,10 @@ function handleAskSubmit(question){
 }
 function resolveAskClarify(domain){
   if(!askClarify) return;
-  const {operation, range} = askClarify;
+  const {operation, range, norm} = askClarify;
   askClarify = null;
   try{
-    const intent = buildIntentFromDomainOp(domain, operation, range, '');
+    const intent = buildIntentFromDomainOp(domain, operation, range, norm||'');
     askLastDomain = domain; askLastOperation = operation;
     const r = executeAskIntent(intent);
     askAnswer=r.answer; askEvidence=r.evidence;
@@ -4089,10 +4226,10 @@ function renderAskView(){
 
     ${askHistory.length>1 ? `
     <div class="section-header" style="margin-top:20px;">Earlier this session</div>
-    ${askHistory.slice(1,6).map(h=>`<div class="row-item"><div class="main" style="font-weight:600;">${escapeHtml(h.q)}</div></div>`).join('')}
+    ${askHistory.slice(1,6).map((h,i)=>`<div class="row-item" data-askrerun="${i+1}" style="cursor:pointer;"><div class="main" style="font-weight:600;">${escapeHtml(h.q)}</div><div class="meta-text">↻</div></div>`).join('')}
     ` : ''}
 
-    <div class="note" style="margin-top:20px;">Answers are generated only from her logged records — nothing is estimated or diagnosed. This can't assess medical concerns; check with your GP or child health nurse for those.</div>
+    <div class="note" style="margin-top:20px;margin-bottom:60px;">Answers are generated only from her logged records — nothing is estimated or diagnosed. This can't assess medical concerns; check with your GP or child health nurse for those.</div>
   `;
 }
 function bindAskView(){
@@ -4111,6 +4248,13 @@ function bindAskView(){
   });
   document.querySelectorAll('[data-askclarify]').forEach(b=>{
     b.addEventListener('click', ()=> resolveAskClarify(b.dataset.askclarify));
+  });
+  document.querySelectorAll('[data-askrerun]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const idx = parseInt(b.dataset.askrerun,10);
+      const h = askHistory[idx];
+      if(h) handleAskSubmit(h.q);
+    });
   });
   const evToggle = document.getElementById('askEvidenceToggle');
   if(evToggle) evToggle.addEventListener('click', ()=>{ askEvidenceExpanded=!askEvidenceExpanded; renderMain(); });
@@ -4371,17 +4515,25 @@ function bindWeekRhythm(){
   const nextBtn = document.getElementById('weekNextBtn');
   if(nextBtn) nextBtn.addEventListener('click', ()=>{ weekOffset=Math.max(0,weekOffset-1); weekActiveIdx=null; renderMain(); });
   document.querySelectorAll('[data-viewday]').forEach(b=>{
-    b.addEventListener('click', ()=> openRhythmView(b.dataset.viewday, 'care'));
+    b.addEventListener('click', ()=> openRhythmDay(b.dataset.viewday));
   });
 }
 let careSubView = null;
 /* ---------------- 24-Hour Rhythm view: Today/Yesterday/any date, one aligned timeline ---------------- */
 let rhythmDateKey = null;
-function renderRhythmView(){
-  const dayKey = rhythmDateKey || sydDateKey();
-  const todayKey = sydDateKey(), yestKey = sydDateKey(Date.now()-86400000);
+function shiftDayKey(dayKey, delta){ return sydDateKey(sydMidnightUTC(dayKey) + delta*86400000 + 43200000); }
+/* Embeddable Daily Rhythm — the actual visual lives here so it can be a
+   prominent, permanent part of Care rather than a page reached by a link.
+   Reuses the exact same canonical functions as everywhere else (dailySummary,
+   getDailyNappyStats, effectiveSleepRecords/sleepBounds for the calendar-
+   overlap clipping) so its numbers can never drift from Home/Care/7-Day
+   Summary/Ask Keshavi for the same date. */
+function renderRhythmBody(dayKeyArg){
+  const dayKey = dayKeyArg || sydDateKey();
+  const todayKey = sydDateKey();
+  const isToday = dayKey===todayKey;
   const dayStart = sydMidnightUTC(dayKey), dayEnd = dayStart+86400000;
-  const PX_PER_MIN = 0.55;
+  const PX_PER_MIN = 0.45;
   const totalHeight = Math.round(1440*PX_PER_MIN);
   const minutesFromMidnight = ms => (ms-dayStart)/60000;
 
@@ -4394,12 +4546,21 @@ function renderRhythmView(){
   const feeds = state.feeds.map(normalizeFeed).filter(f=> sydDateKey(f.date)===dayKey);
   const nappies = state.nappies.filter(n=> sydDateKey(n.date)===dayKey);
   const temps = state.temperatures.filter(t=> sydDateKey(t.date)===dayKey);
+  const hasAny = sleepBlocks.length || feeds.length || nappies.length || temps.length;
+
+  const dsForDay = dailySummary(new Date(dayKey+'T12:00:00'));
+  const nappyStatsForDay = getDailyNappyStats(new Date(dayKey+'T12:00:00'));
+  const dateLabel = new Date(dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ});
 
   let hourLines = '';
   for(let h=0; h<24; h++){
     const top = h*60*PX_PER_MIN;
-    const label = h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
-    hourLines += `<div style="position:absolute;left:0;right:0;top:${top}px;border-top:1px solid var(--line);"></div><div style="position:absolute;left:0;top:${(top-6).toFixed(0)}px;font-size:9px;color:var(--ink-tertiary);width:34px;">${label}</div>`;
+    const major = h%3===0;
+    hourLines += `<div style="position:absolute;left:0;right:0;top:${top}px;border-top:1px solid var(--line);opacity:${major?0.9:0.35};"></div>`;
+    if(major){
+      const label = h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
+      hourLines += `<div style="position:absolute;left:0;top:${(top-6).toFixed(0)}px;font-size:9px;color:var(--ink-tertiary);width:34px;">${label}</div>`;
+    }
   }
   const sleepHtml = sleepBlocks.map(b=>{
     const top = minutesFromMidnight(b.clipStart)*PX_PER_MIN;
@@ -4415,45 +4576,58 @@ function renderRhythmView(){
     const top = minutesFromMidnight(m.ms)*PX_PER_MIN;
     return `<div class="rhythm-row" data-tlitem="${m.kind}:${m.id}" style="position:absolute;left:40px;top:${top.toFixed(0)}px;"><span class="rhythm-dot" style="background:${m.color};"></span>${m.label}</div>`;
   }).join('');
+  const nowLine = isToday ? `<div style="position:absolute;left:0;right:0;top:${(minutesFromMidnight(Date.now())*PX_PER_MIN).toFixed(0)}px;border-top:2px solid var(--lavender-deep);"><span style="position:absolute;left:-3px;top:-4px;width:8px;height:8px;border-radius:50%;background:var(--lavender-deep);"></span></div>` : '';
 
   return `
-    <div class="hero">
-      <button id="rhythmBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Back</button>
-      <h1>Day Rhythm</h1><p>${new Date(dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ})}</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-weight:800;font-size:14px;">${isToday?'Today · ':''}${dateLabel}</div>
+      <div style="display:flex;align-items:center;gap:2px;">
+        <button class="ql-link" data-rhprev="1" style="padding:4px 6px;" aria-label="Previous day">‹</button>
+        ${!isToday ? `<button class="ql-link" data-rhtoday="1" style="padding:4px 6px;">Today</button>` : ''}
+        <button class="ql-link" data-rhnext="1" style="padding:4px 6px;${isToday?'opacity:.3;pointer-events:none;':''}" aria-label="Next day">›</button>
+        <button class="ql-link" id="rhythmDateBtn" style="padding:4px 6px;" aria-label="Choose date">${icon('calendar',14)}</button>
+        <input type="date" id="rhythmDatePicker" value="${dayKey}" max="${todayDateInput()}" style="width:1px;height:1px;padding:0;border:0;opacity:0;position:absolute;">
+      </div>
     </div>
-    <div class="tabs">
-      <button data-rd="today" class="${dayKey===todayKey?'active':''}">Today</button>
-      <button data-rd="yesterday" class="${dayKey===yestKey?'active':''}">Yesterday</button>
+    <div class="stat-row" style="margin:8px 0 4px;">
+      <div class="stat-cell"><div class="stat-val">${fmtDuration(dsForDay.totalSleepMin)}</div><div class="stat-lbl">Sleep${isToday?' so far':''}</div></div>
+      <div class="stat-div"></div>
+      <div class="stat-cell"><div class="stat-val">${dsForDay.feedCount}</div><div class="stat-lbl">Feeds</div></div>
+      <div class="stat-div"></div>
+      <div class="stat-cell"><div class="stat-val">${nappyStatsForDay.wet}💧 ${nappyStatsForDay.dirty}💩</div><div class="stat-lbl">Nappies</div></div>
     </div>
-    <input type="date" id="rhythmDatePicker" value="${dayKey}" max="${todayDateInput()}" style="margin-bottom:16px;">
-    ${(sleepBlocks.length || markers.length) ? `
-    <div style="position:relative;height:${totalHeight}px;">
-      ${hourLines}
-      ${sleepHtml}
-      ${markerHtml}
-    </div>` : `<div class="empty">Nothing logged on this day.</div>`}
+    ${hasAny ? `
+    <div style="position:relative;height:${totalHeight}px;margin-top:10px;">
+      ${hourLines}${sleepHtml}${markerHtml}${nowLine}
+    </div>` : `<div class="empty" style="margin-top:10px;">No activity logged for this day.</div>`}
+    <button class="ql-link" id="goTimelineFromRhythm" style="padding:10px 0 0;">Open chronological timeline →</button>
   `;
 }
-function bindRhythmView(){
-  const back = document.getElementById('rhythmBack');
-  if(back) back.addEventListener('click', ()=>{ currentView = rhythmReturnView || 'care'; render(); });
-  document.querySelectorAll('.tabs [data-rd]').forEach(b=>{
-    b.addEventListener('click', ()=>{ rhythmDateKey = b.dataset.rd==='today' ? null : sydDateKey(Date.now()-86400000); renderMain(); });
-  });
+function bindRhythmBody(){
+  document.querySelectorAll('[data-rhprev]').forEach(b=> b.addEventListener('click', ()=>{
+    const k = shiftDayKey(rhythmDateKey||sydDateKey(), -1);
+    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
+  }));
+  document.querySelectorAll('[data-rhnext]').forEach(b=> b.addEventListener('click', ()=>{
+    const k = shiftDayKey(rhythmDateKey||sydDateKey(), 1);
+    if(k>sydDateKey()) return;
+    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
+  }));
+  document.querySelectorAll('[data-rhtoday]').forEach(b=> b.addEventListener('click', ()=>{ rhythmDateKey=null; renderMain(); }));
   const picker = document.getElementById('rhythmDatePicker');
+  const dateBtn = document.getElementById('rhythmDateBtn');
+  if(dateBtn && picker) dateBtn.addEventListener('click', ()=>{ if(picker.showPicker) picker.showPicker(); else picker.click(); });
   if(picker) picker.addEventListener('change', ()=>{ rhythmDateKey = picker.value===sydDateKey() ? null : picker.value; renderMain(); });
   document.querySelectorAll('[data-tlitem]').forEach(row=>{
-    row.addEventListener('click', ()=>{
-      const [kind,id] = row.dataset.tlitem.split(':');
-      openDetailSheet(kind, id);
-    });
+    row.addEventListener('click', ()=>{ const [kind,id]=row.dataset.tlitem.split(':'); openDetailSheet(kind,id); });
   });
+  const gtfr = document.getElementById('goTimelineFromRhythm');
+  if(gtfr) gtfr.addEventListener('click', ()=>{ currentView='timeline'; render(); });
 }
-let rhythmReturnView = 'care';
-function openRhythmView(dayKey, fromView){
+function openRhythmDay(dayKey){
   rhythmDateKey = dayKey===sydDateKey() ? null : dayKey;
-  rhythmReturnView = fromView || 'care';
-  currentView = 'rhythm';
+  careSubView = null;
+  currentView = 'care';
   render();
 }
 /* ---------------- Smart Daily Brief: rolling last-24h view, distinct from "today" calendar totals ---------------- */
@@ -4716,25 +4890,22 @@ function renderCareOverview(){
     </div>
 
     <div class="card">
-      <h2>Today — ${ds.dayLabel}<span class="link" id="goRhythmLink">Rhythm →</span></h2>
+      <h2>Today — ${ds.dayLabel}</h2>
       <div class="rline">Feeding: ${ds.feedCount} feed${ds.feedCount===1?'':'s'}${ds.totalNursingMin?`, ${fmtDuration(ds.totalNursingMin)} total nursing`:''}${ds.avgIntervalMin!=null?`, avg interval ${fmtDuration(ds.avgIntervalMin)}`:''}</div>
       <div class="rline">Sleep: ${fmtDuration(ds.totalSleepMin)} total across ${ds.sleepPeriods} period${ds.sleepPeriods===1?'':'s'}${ds.longestSleep?`, longest ${fmtDuration(ds.longestSleep)}`:''}</div>
       <div class="rline">Nappies: ${ds.nappies.wet} wet${baselineForToday && baselineForToday.wet ? ` (typical ${Math.round(baselineForToday.wet.p25)}–${Math.round(baselineForToday.wet.p75)})` : ''} · ${ds.nappies.dirty} dirty</div>
       <div class="rline">Growth: ${ds.growthToday.length ? ds.growthToday.map(m=>`${labelType(m.type)} ${m.value}${unitFor(m.type)}`).join(', ') : 'No measurement today'}</div>
     </div>
-    <div class="row-item" id="goBriefLink" style="cursor:pointer;">
-      <div class="main" style="font-weight:600;">Daily brief</div>
-      <div class="meta-text">Last 24 hours →</div>
-    </div>
-    <div class="row-item" id="goRecapLink" style="cursor:pointer;">
-      <div class="main" style="font-weight:600;">Monthly recap</div>
-      <div class="meta-text">${monthLabel(currentYearMonth())} →</div>
-    </div>
 
-    ${renderBaselineCard()}
+    <div class="card">
+      <h2>Daily Rhythm</h2>
+      ${renderRhythmBody(rhythmDateKey)}
+    </div>
 
     ${renderWeekRhythm()}
     ${ws.weightChange7 ? `<div class="meta-text" style="margin:-8px 2px 14px;">Weight: ${ws.weightChange7.diff>=0?'+':''}${ws.weightChange7.diff.toFixed(2)} kg over ${Math.round(ws.weightChange7.days)} days${ws.weightChange7.gramsPerDay!=null?` (${ws.weightChange7.gramsPerDay>=0?'+':''}${ws.weightChange7.gramsPerDay.toFixed(1)} g/day)`:''}</div>` : ''}
+
+    ${renderBaselineCard()}
 
     <div class="card">
       <h2>Insights</h2>
@@ -4745,6 +4916,20 @@ function renderCareOverview(){
     <div class="row-item" data-caresub="feeding" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('feed',17)}Feeding</div><div class="meta-text">→</div></div>
     <div class="row-item" data-caresub="sleep" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('sleep',17)}Sleep</div><div class="meta-text">→</div></div>
     <div class="row-item" data-caresub="nappies" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('nappy',17)}Nappies</div><div class="meta-text">→</div></div>
+
+    <div class="section-header">More</div>
+    <div class="row-item" id="goBriefLink" style="cursor:pointer;">
+      <div class="main" style="font-weight:600;">Daily brief</div>
+      <div class="meta-text">Last 24 hours →</div>
+    </div>
+    <div class="row-item" id="goRecapLink" style="cursor:pointer;">
+      <div class="main" style="font-weight:600;">Monthly recap</div>
+      <div class="meta-text">${monthLabel(currentYearMonth())} →</div>
+    </div>
+    <div class="row-item" id="goTimelineFromCare" style="cursor:pointer;">
+      <div class="main" style="font-weight:600;">History</div>
+      <div class="meta-text">View all activity →</div>
+    </div>
   `;
 }
 function renderCareFeeding(){
@@ -4824,12 +5009,13 @@ function bindCare(){
   document.querySelectorAll('[data-caresub]').forEach(b=>{
     b.addEventListener('click', ()=>{ careSubView=b.dataset.caresub; renderMain(); });
   });
-  const grl = document.getElementById('goRhythmLink');
-  if(grl) grl.addEventListener('click', ()=> openRhythmView(sydDateKey(), 'care'));
   const gbl = document.getElementById('goBriefLink');
   if(gbl) gbl.addEventListener('click', ()=>{ currentView='brief'; render(); });
   const grcl = document.getElementById('goRecapLink');
   if(grcl) grcl.addEventListener('click', ()=>{ recapYearMonth=null; currentView='recap'; render(); });
+  const gtfc = document.getElementById('goTimelineFromCare');
+  if(gtfc) gtfc.addEventListener('click', ()=>{ currentView='timeline'; render(); });
+  bindRhythmBody();
   bindWeekRhythm();
   bindInsightCards();
   bindDeletes();
