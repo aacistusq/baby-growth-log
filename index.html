@@ -6,6 +6,9 @@
 <title>Growth Log</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <style>
   :root{
     /* Brand accents (used selectively, not as a wall-to-wall wash) */
@@ -525,7 +528,9 @@ const VACCINE_SCHEDULES = {
 };
 const DEFAULT_VACCINES = VACCINE_SCHEDULES.generic.items;
 
-/* ---------------- Storage: Firestore REST (no SDK, no login) ---------------- */
+/* ---------------- Storage: Firebase SDK (Auth + Firestore realtime) ----------------
+ * The Firebase config below is public by design — security comes from
+ * Firebase Authentication + Firestore Security Rules (UID allowlist), not secrecy. */
 const firebaseConfig = {
   apiKey: "AIzaSyC_fEk--Wq6bFGa7Sgon5Vz4j5wjuO6f7M",
   authDomain: "baby-growth-log.firebaseapp.com",
@@ -534,8 +539,20 @@ const firebaseConfig = {
   messagingSenderId: "747639865841",
   appId: "1:747639865841:web:2aad3330b75c3215d8c450"
 };
-const FS_DOC = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/appdata/family`;
-const FS_KEY = firebaseConfig.apiKey;
+let fbAuth = null, fbDb = null, authUser = null, authReady = false;
+let unsubscribeSnapshot = null;
+let initialDataLoaded = false;
+function initFirebase(){
+  if(typeof firebase === 'undefined'){
+    throw new Error('Firebase scripts did not load (blocked by network, ad-blocker, or offline).');
+  }
+  if(!firebase.apps || !firebase.apps.length){
+    firebase.initializeApp(firebaseConfig);
+  }
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+}
+function familyDocRef(){ return fbDb.collection('appdata').doc('family'); }
 
 function buildPayload(){
   return {
@@ -553,28 +570,22 @@ function buildPayload(){
   };
 }
 async function firestoreGet(){
-  const res = await fetch(`${FS_DOC}?key=${FS_KEY}`);
-  if(res.status===404) return null;
-  if(!res.ok) throw new Error('Firestore GET failed: '+res.status);
-  const doc = await res.json();
-  const raw = doc.fields && doc.fields.json && doc.fields.json.stringValue;
-  return raw ? JSON.parse(raw) : null;
+  const snap = await familyDocRef().get();
+  if(!snap.exists) return null;
+  const data = snap.data();
+  return (data && data.json) ? JSON.parse(data.json) : null;
 }
 async function firestorePatch(payload){
-  const body = { fields: { json: { stringValue: JSON.stringify(payload) } } };
-  const res = await fetch(`${FS_DOC}?key=${FS_KEY}&updateMask.fieldPaths=json`, {
-    method:'PATCH',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify(body)
-  });
-  if(!res.ok) throw new Error('Firestore PATCH failed: '+res.status);
+  await familyDocRef().set({ json: JSON.stringify(payload) }, { merge:true });
 }
 let lastSnapshotJSON = null;
+let suppressNextSnapshot = false;
 async function saveKey(key, value){
   try{
     const payload = buildPayload();
-    await firestorePatch(payload);
     lastSnapshotJSON = JSON.stringify(payload);
+    suppressNextSnapshot = true;
+    await firestorePatch(payload);
   }catch(e){ console.error('save failed', key, e); toast('Sync error — check your connection'); }
 }
 function applyRemote(remote){
@@ -598,21 +609,64 @@ function safeRerender(){
   if(document.querySelector('nav.bottom')) renderMain();
   else render();
 }
-async function pollNow(){
-  try{
-    const remote = await firestoreGet();
-    if(!remote) return;
+/* Realtime sync: replaces the old 6-second polling. The other phone's changes
+   land within moments, and unchanged state costs nothing. */
+function startRealtimeSync(){
+  stopRealtimeSync();
+  unsubscribeSnapshot = familyDocRef().onSnapshot(snap=>{
+    const wasInitial = !initialDataLoaded;
+    initialDataLoaded = true;
+    if(suppressNextSnapshot && snap.metadata.hasPendingWrites===false){
+      suppressNextSnapshot = false;
+    }
+    if(snap.metadata.hasPendingWrites) return; // our own local write echo
+    const data = snap.exists ? snap.data() : null;
+    const remote = (data && data.json) ? JSON.parse(data.json) : null;
+    if(!remote){ if(wasInitial) render(); return; }
     const remoteJSON = JSON.stringify(remote);
     if(remoteJSON !== lastSnapshotJSON){
       lastSnapshotJSON = remoteJSON;
       applyRemote(remote);
-      safeRerender();
+      if(state.prefs && state.prefs.lastFeedType) currentFeedSubtype = state.prefs.lastFeedType;
+      if(state.prefs && state.prefs.lastTempMethod) currentTempMethod = state.prefs.lastTempMethod;
+      if(state.prefs && state.prefs.lastHealthCat) currentHealthCat = state.prefs.lastHealthCat;
+      applyTheme();
+      if(wasInitial) render(); else safeRerender();
+    } else if(wasInitial){
+      render();
     }
-  }catch(e){ console.error('poll failed', e); }
+  }, err=>{
+    console.error('snapshot error', err);
+    if(err && err.code==='permission-denied'){
+      toast('Access denied — check the Firestore rules include your account');
+    } else {
+      toast('Sync error — check your connection');
+    }
+    initialDataLoaded = true;
+    render();
+  });
 }
-function startPolling(){
-  setInterval(()=>{ if(document.visibilityState==='visible') pollNow(); }, 6000);
-  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') pollNow(); });
+function stopRealtimeSync(){
+  if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+}
+
+/* ---------------- Authentication ---------------- */
+async function signIn(email, password){
+  await fbAuth.signInWithEmailAndPassword(email, password);
+}
+async function signOutUser(){
+  stopRealtimeSync();
+  initialDataLoaded = false;
+  lastSnapshotJSON = null;
+  await fbAuth.signOut();
+}
+function friendlyAuthError(e){
+  const code = e && e.code || '';
+  if(code.includes('invalid-email')) return 'That email address doesn\'t look right.';
+  if(code.includes('user-not-found') || code.includes('wrong-password') || code.includes('invalid-credential') || code.includes('invalid-login-credentials')) return 'Email or password is incorrect.';
+  if(code.includes('too-many-requests')) return 'Too many attempts — wait a few minutes and try again.';
+  if(code.includes('network-request-failed')) return 'Network error — check your connection.';
+  return 'Sign-in failed. Please try again.';
 }
 
 /* ---------------- State ---------------- */
@@ -649,10 +703,22 @@ let sheetShowTime = false;
 let sheetShowDetails = false;
 
 function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
-function fmtDate(d){ return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}); }
-function fmtDateTime(d){ return new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}); }
-function fmtDateFull(d){ return new Date(d).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric'}); }
-function todayInput(){ const d=new Date(); return d.toISOString().slice(0,16); }
+/* App is always displayed/logged in Sydney time, regardless of the device's own timezone. */
+const APP_TZ = 'Australia/Sydney';
+function sydDateParts(dateInput){
+  const d = dateInput ? new Date(dateInput) : new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
+  }).formatToParts(d);
+  const get = t => parts.find(p=>p.type===t).value;
+  return { year:get('year'), month:get('month'), day:get('day'), hour:get('hour'), minute:get('minute') };
+}
+function sydDateKey(dateInput){ const p=sydDateParts(dateInput); return `${p.year}-${p.month}-${p.day}`; }
+function fmtDate(d){ return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric',timeZone:APP_TZ}); }
+function fmtDateTime(d){ return new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}); }
+function fmtDateFull(d){ return new Date(d).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:APP_TZ}); }
+function todayInput(){ const p=sydDateParts(); return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; }
+function todayDateInput(){ const p=sydDateParts(); return `${p.year}-${p.month}-${p.day}`; }
 function fmtDuration(mins){
   mins = Math.round(mins||0);
   const h = Math.floor(mins/60), m = mins%60;
@@ -1011,8 +1077,68 @@ function icon(name, size){
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${paths[name]||''}</svg>`;
 }
 
+function renderLogin(loginError, busy){
+  return `
+    <div class="onboard">
+      <div class="mark">🌸</div>
+      <h1>Welcome back</h1>
+      <p class="sub">Sign in to see your family's tracker.</p>
+      <label>Email</label>
+      <input type="email" id="loginEmail" autocomplete="email" inputmode="email" placeholder="you@example.com">
+      <label>Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" placeholder="Password">
+      ${loginError ? `<div class="note" style="color:var(--status-critical-fg);font-weight:700;margin-top:10px;">${escapeHtml(loginError)}</div>` : ''}
+      <button class="btn" id="loginBtn" ${busy?'disabled':''}>${busy ? 'Signing in…' : 'Sign in'}</button>
+      <div class="note" style="margin-top:14px;">Access is limited to family accounts. If you've forgotten the password, it can be reset from the Firebase console.</div>
+    </div>
+  `;
+}
+function bindLogin(){
+  const doLogin = async ()=>{
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    if(!email || !password) return;
+    document.getElementById('app').innerHTML = renderLogin(null, true);
+    try{
+      await signIn(email, password);
+      /* onAuthStateChanged handles the rest */
+    }catch(e){
+      console.error('sign-in failed', e);
+      document.getElementById('app').innerHTML = renderLogin(friendlyAuthError(e), false);
+      bindLogin();
+    }
+  };
+  const btn = document.getElementById('loginBtn');
+  if(btn) btn.addEventListener('click', doLogin);
+  const pw = document.getElementById('loginPassword');
+  if(pw) pw.addEventListener('keydown', e=>{ if(e.key==='Enter') doLogin(); });
+  const em = document.getElementById('loginEmail');
+  if(em) em.focus();
+}
+function renderLoadingScreen(){
+  return `
+    <div class="onboard" style="align-items:center;text-align:center;">
+      <div class="mark">🌸</div>
+      <p class="sub">Loading…</p>
+    </div>
+  `;
+}
+function renderStartupError(message){
+  return `
+    <div class="onboard" style="align-items:center;text-align:center;">
+      <div class="mark">⚠️</div>
+      <h1 style="font-size:22px;">Couldn't connect</h1>
+      <p class="sub">${escapeHtml(message)}</p>
+      <button class="btn" id="retryBootBtn">Try again</button>
+      <div class="note" style="margin-top:14px;">If this keeps happening: check your internet connection, make sure no browser extension is blocking Google/Firebase scripts, and check the browser console for the exact error.</div>
+    </div>
+  `;
+}
 function render(){
   const app = document.getElementById('app');
+  if(!authReady){ app.innerHTML = renderLoadingScreen(); return; }
+  if(!authUser){ app.innerHTML = renderLogin(); bindLogin(); return; }
+  if(!initialDataLoaded){ app.innerHTML = renderLoadingScreen(); return; }
   if(!state.profile){ app.innerHTML = renderOnboard(); bindOnboard(); return; }
   app.innerHTML = `
     <header class="top">
@@ -1096,7 +1222,7 @@ function renderSheet(){
   }
 }
 function nowTimeRow(inputId, dateOnly){
-  const val = dateOnly ? new Date().toISOString().slice(0,10) : todayInput();
+  const val = dateOnly ? todayDateInput() : todayInput();
   if(!sheetShowTime){
     return `<div class="ql-nowrow"><span>Now</span><button data-showtime="1">Change</button><input type="hidden" id="${inputId}" value="${val}"></div>`;
   }
@@ -1508,8 +1634,8 @@ function lastSleepInfo(){
   return { line: `${s.label==='nap'?'☀️ Nap':'🌙 Night'} · Slept ${fmtDuration(s.mins)}`, sub: `Ended ${timeAgo(end.toISOString())}` };
 }
 function nappyCountsToday(){
-  const todayStr = new Date().toDateString();
-  const todays = state.nappies.filter(n=> new Date(n.date).toDateString()===todayStr);
+  const todayStr = sydDateKey();
+  const todays = state.nappies.filter(n=> sydDateKey(n.date)===todayStr);
   let wet=0,dirty=0;
   todays.forEach(n=>{ if(n.type==='wet'||n.type==='both') wet++; if(n.type==='poo'||n.type==='both') dirty++; });
   return {wet, dirty};
@@ -1590,7 +1716,7 @@ function renderHome(){
 
     <div class="section-header">Today<span class="link" id="goTimelineLink">Full timeline →</span></div>
     ${recentEvents.length ? recentEvents.map(e=>`
-      <div class="row-item"><div class="main" style="font-weight:600;">${e.line}</div><div class="meta-text">${new Date(e.date).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}</div></div>
+      <div class="row-item"><div class="main" style="font-weight:600;">${e.line}</div><div class="meta-text">${new Date(e.date).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})}</div></div>
     `).join('') : `<div class="empty">Nothing logged yet today.<br>Tap ＋ below to get started.</div>`}
 
     ${(upcomingAppt || dueVaccines.length) ? `
@@ -1781,7 +1907,7 @@ function renderMomentForm(){
     <label>What happened</label>
     <input type="text" id="momTitle" placeholder="e.g. First smile">
     <label>Date</label>
-    <input type="date" id="momDate" value="${new Date().toISOString().slice(0,10)}">
+    <input type="date" id="momDate" value="${todayDateInput()}">
     <label>Photo (optional)</label>
     <input type="file" accept="image/*" id="momPhoto">
     <label>Note (optional)</label>
@@ -2126,8 +2252,8 @@ function bindGrowth(){
 /* ---------------- Daily / weekly summaries & pattern insights ---------------- */
 function dailySummary(dateRef){
   dateRef = dateRef || new Date();
-  const dayStr = dateRef.toDateString();
-  const feedsToday = state.feeds.map(normalizeFeed).filter(f=> new Date(f.date).toDateString()===dayStr);
+  const dayStr = sydDateKey(dateRef);
+  const feedsToday = state.feeds.map(normalizeFeed).filter(f=> sydDateKey(f.date)===dayStr);
   const breastfeeds = feedsToday.filter(f=>f.type==='breastfeeding');
   const totalNursingMin = breastfeeds.reduce((s,f)=>s+(f.totalMins||0),0);
   const feedTimes = feedsToday.map(f=>new Date(f.date).getTime()).sort((a,b)=>a-b);
@@ -2136,12 +2262,12 @@ function dailySummary(dateRef){
     let gap=0; for(let i=1;i<feedTimes.length;i++) gap += feedTimes[i]-feedTimes[i-1];
     avgIntervalMin = (gap/(feedTimes.length-1))/60000;
   }
-  const sleepsToday = state.sleeps.filter(s=> new Date(s.date).toDateString()===dayStr);
+  const sleepsToday = state.sleeps.filter(s=> sydDateKey(s.date)===dayStr);
   const totalSleepMin = sleepsToday.reduce((s,x)=>s+(x.mins||0),0);
   const longestSleep = sleepsToday.reduce((mx,x)=>Math.max(mx,x.mins||0),0);
-  const growthToday = state.measurements.filter(m=> new Date(m.date).toDateString()===dayStr);
+  const growthToday = state.measurements.filter(m=> sydDateKey(m.date)===dayStr);
   return {
-    dayLabel: dateRef.toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long'}),
+    dayLabel: dateRef.toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ}),
     feedCount: feedsToday.length, totalNursingMin, avgIntervalMin,
     totalSleepMin, sleepPeriods: sleepsToday.length, longestSleep,
     nappies: nappyCountsToday(), growthToday
@@ -2407,12 +2533,12 @@ function renderTimeline(){
   const groups = {};
   const order = [];
   events.forEach(e=>{
-    const dayKey = new Date(e.date).toDateString();
+    const dayKey = sydDateKey(e.date);
     if(!groups[dayKey]){ groups[dayKey]=[]; order.push(dayKey); }
     groups[dayKey].push(e);
   });
-  const todayKey = new Date().toDateString();
-  const yestKey = new Date(Date.now()-86400000).toDateString();
+  const todayKey = sydDateKey();
+  const yestKey = sydDateKey(Date.now()-86400000);
   return `
     <div class="hero">
       <button id="timelineBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
@@ -2422,13 +2548,13 @@ function renderTimeline(){
       ${filters.map(f=>`<button data-tf="${f}" class="${timelineFilter===f?'active':''}">${f.charAt(0).toUpperCase()+f.slice(1)}</button>`).join('')}
     </div>
     ${order.length ? order.map(dk=>`
-      <div class="tl-day">${dk===todayKey?'Today':dk===yestKey?'Yesterday':new Date(dk).toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric'})}</div>
+      <div class="tl-day">${dk===todayKey?'Today':dk===yestKey?'Yesterday':new Date(dk+'T12:00:00').toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric',timeZone:APP_TZ})}</div>
       <div class="tl-group">
         ${groups[dk].map(e=>`
           <div class="tl-row" data-tlitem="${e.kind}:${e.id}">
             <div class="tl-dot-col"><div class="tl-dot"></div><div class="tl-line"></div></div>
             <div class="tl-content">
-              <div class="tl-time">${new Date(e.date).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'})}</div>
+              <div class="tl-time">${new Date(e.date).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:APP_TZ})}</div>
               <div class="tl-line-text">${e.line}</div>
             </div>
           </div>`).join('')}
@@ -2510,7 +2636,7 @@ function renderVaccineRow(v){
   if(markingGivenId===v.id){
     givenForm = `
       <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
-        <label>Date given</label><input type="date" id="gvDate-${v.id}" value="${new Date().toISOString().slice(0,10)}">
+        <label>Date given</label><input type="date" id="gvDate-${v.id}" value="${todayDateInput()}">
         <label>Provider (optional)</label><input type="text" id="gvProvider-${v.id}" placeholder="e.g. Dr Vasu">
         <label>Batch / lot (optional)</label><input type="text" id="gvBatch-${v.id}" placeholder="optional">
         <label>Reaction (optional)</label><input type="text" id="gvReaction-${v.id}" placeholder="optional">
@@ -2818,6 +2944,7 @@ function renderHealthOverview(){
     <div class="row-item" data-gosub="profile" style="cursor:pointer;"><div class="main" style="font-weight:600;">Baby profile &amp; vaccine schedule</div><div class="meta-text">→</div></div>
     <div class="row-item" id="goExportBtn" style="cursor:pointer;"><div class="main" style="font-weight:600;">Export health summary</div><div class="meta-text">→</div></div>
     <div class="row-item" data-gosub="backup" style="cursor:pointer;"><div class="main" style="font-weight:600;">Data &amp; Backup</div><div class="meta-text">→</div></div>
+    <div class="row-item" id="signOutRow" style="cursor:pointer;"><div class="main" style="font-weight:600;">Sign out</div><div class="meta-text">${authUser ? escapeHtml(authUser.email||'') : ''}</div></div>
   `;
 }
 function renderHealthVaccinations(){
@@ -2898,7 +3025,7 @@ function downloadBackupFile(){
   const blob = new Blob([json], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const dateStr = new Date().toISOString().slice(0,10);
+  const dateStr = todayDateInput();
   const nameSlug = (state.profile.name||'baby').toLowerCase().replace(/[^a-z0-9]+/g,'-');
   a.href = url;
   a.download = `${nameSlug}-growth-log-backup-${dateStr}.json`;
@@ -2956,6 +3083,11 @@ function bindHealth(){
   });
   const geb = document.getElementById('goExportBtn');
   if(geb) geb.addEventListener('click', ()=>{ currentView='export'; render(); });
+  const sor = document.getElementById('signOutRow');
+  if(sor) sor.addEventListener('click', async ()=>{
+    try{ await signOutUser(); healthSubView=null; currentView='home'; }
+    catch(e){ console.error('sign out failed', e); toast('Sign out failed — try again'); }
+  });
 
   const cbb = document.getElementById('createBackupBtn');
   if(cbb) cbb.addEventListener('click', async ()=>{
@@ -3290,7 +3422,7 @@ function renderOnboard(){
       <label>Baby's name</label>
       <input type="text" id="obName" placeholder="e.g. Amara">
       <label>Date of birth</label>
-      <input type="date" id="obDob" value="${new Date().toISOString().slice(0,10)}">
+      <input type="date" id="obDob" value="${todayDateInput()}">
       <button class="btn" id="obSave">Start tracking 🌱</button>
       <p class="note">Growth percentiles use WHO standards for girls. Data syncs automatically across every device that opens this app — no login needed. Anyone with the link can view and add entries, so only share it with people you trust with her data.</p>
     </div>
@@ -3325,22 +3457,62 @@ if(window.matchMedia){
     }
   });
 }
-async function boot(){
+let bootStallTimer = null;
+function boot(){
   applyTheme();
+  authReady = false; authUser = null; initialDataLoaded = false;
+  const app = document.getElementById('app');
+  app.innerHTML = renderLoadingScreen();
+
+  clearTimeout(bootStallTimer);
+  bootStallTimer = setTimeout(()=>{
+    if(!authReady){
+      app.innerHTML = renderStartupError("This is taking longer than expected — Firebase may not have responded.");
+      bindStartupError();
+    }
+  }, 9000);
+
   try{
-    const remote = await firestoreGet();
-    if(remote){ applyRemote(remote); lastSnapshotJSON = JSON.stringify(remote); }
-    else { lastSnapshotJSON = JSON.stringify(buildPayload()); }
+    initFirebase();
   }catch(e){
-    console.error(e);
-    toast('Could not connect — check your internet connection');
+    console.error('Firebase init failed', e);
+    clearTimeout(bootStallTimer);
+    app.innerHTML = renderStartupError(e.message || 'Could not start Firebase.');
+    bindStartupError();
+    return;
   }
-  if(state.prefs && state.prefs.lastFeedType) currentFeedSubtype = state.prefs.lastFeedType;
-  if(state.prefs && state.prefs.lastTempMethod) currentTempMethod = state.prefs.lastTempMethod;
-  if(state.prefs && state.prefs.lastHealthCat) currentHealthCat = state.prefs.lastHealthCat;
-  applyTheme();
-  render();
-  startPolling();
+
+  try{
+    fbAuth.onAuthStateChanged(user=>{
+      clearTimeout(bootStallTimer);
+      authReady = true;
+      authUser = user;
+      if(user){
+        initialDataLoaded = false;
+        render(); /* loading while first snapshot arrives */
+        startRealtimeSync();
+      } else {
+        stopRealtimeSync();
+        initialDataLoaded = false;
+        applyRemote({}); /* clear in-memory data on sign-out */
+        render(); /* login screen */
+      }
+    }, e=>{
+      console.error('Auth state error', e);
+      clearTimeout(bootStallTimer);
+      app.innerHTML = renderStartupError(friendlyAuthError(e));
+      bindStartupError();
+    });
+  }catch(e){
+    console.error('onAuthStateChanged threw', e);
+    clearTimeout(bootStallTimer);
+    app.innerHTML = renderStartupError(e.message || 'Could not check sign-in status.');
+    bindStartupError();
+  }
+}
+function bindStartupError(){
+  const btn = document.getElementById('retryBootBtn');
+  if(btn) btn.addEventListener('click', ()=> location.reload());
 }
 boot();
 </script>
