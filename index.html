@@ -1155,7 +1155,12 @@ function renderDataLoadError(){
       <p class="sub">${isPermission
         ? "You're signed in, but access to the family data was denied. Your data is very likely completely safe — this is almost always a Firestore rules mismatch, not data loss."
         : "Something went wrong loading your data. This does not mean your data is lost — it's a connection issue."}</p>
-      ${isPermission ? `<div class="note" style="text-align:left;margin-top:4px;">Check in the Firebase console: Authentication → Users, and confirm the UID for the account you just signed in with (${authUser && authUser.email ? escapeHtml(authUser.email) : 'this account'}) exactly matches the UID pasted into Firestore → Rules.</div>` : ''}
+      ${isPermission ? `<div class="note" style="background:var(--surface-muted);border-radius:var(--radius-control);padding:12px 14px;margin-top:4px;text-align:left;">
+        Signed in as: <b>${authUser && authUser.email ? escapeHtml(authUser.email) : '(unknown)'}</b><br>
+        This account's UID: <span id="errorUid" style="font-family:monospace;font-size:11px;word-break:break-all;">${authUser ? escapeHtml(authUser.uid) : '(unknown)'}</span>
+        ${authUser ? `<button id="copyUidBtn" style="border:none;background:none;color:var(--lavender-deep);font-weight:700;font-size:11px;cursor:pointer;padding:2px 0 0;display:block;">Copy UID</button>` : ''}
+        <br><br>Open Firebase console → Firestore Database → Rules, and check that this exact UID (no extra spaces) appears in the allowlist — then confirm the rules were <b>published</b>, not just saved as a draft.
+      </div>` : ''}
       <button class="btn" id="retryLoadBtn" style="margin-top:16px;">Try again</button>
       <button class="ql-link" id="signOutFromErrorBtn">Sign out</button>
     </div>
@@ -1166,6 +1171,11 @@ function bindDataLoadError(){
   if(retry) retry.addEventListener('click', ()=>{ initialDataLoaded=false; dataLoadError=null; render(); startRealtimeSync(); });
   const so = document.getElementById('signOutFromErrorBtn');
   if(so) so.addEventListener('click', async ()=>{ try{ await signOutUser(); dataLoadError=null; } catch(e){ console.error(e); } });
+  const cp = document.getElementById('copyUidBtn');
+  if(cp) cp.addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(authUser.uid); cp.textContent = 'Copied ✓'; setTimeout(()=>{ cp.textContent='Copy UID'; }, 1500); }
+    catch(e){ console.error('copy failed', e); }
+  });
 }
 function render(){
   const app = document.getElementById('app');
@@ -1219,14 +1229,94 @@ let chartActivePointIdx = null;
 let chartPointsCache = [];
 let growthExplainOpen = false;
 let showWhoCurves = false;
-function openDetailSheet(kind, id){
-  sheetDetailKind = kind; sheetDetailId = id;
-  sheetOpen = true; sheetStep = 'detail'; sheetShowTime=false; sheetShowDetails=false;
+let sheetDraft = {};
+let editingKind = null, editingId = null, editingItem = null;
+let entryActionKind = null, entryActionId = null;
+const STEP_TO_KIND = { nappy:'nappy', feed:'feed', sleep:'sleep', temp:'temperature', weight:'measurement', moment:'milestone', healthnote:'healthRecord' };
+const KIND_TO_STEP = { nappy:'nappy', feed:'feed', sleep:'sleep', temperature:'temp', measurement:'weight', milestone:'moment', healthRecord:'healthnote' };
+const FIELD_BOUNDS = {
+  weight:{min:0.5, max:20, unit:'kg', label:'Weight'},
+  length:{min:25, max:105, unit:'cm', label:'Length'},
+  hc:{min:20, max:55, unit:'cm', label:'Head circumference'},
+  tempC:{min:30, max:43, unit:'°C', label:'Temperature'},
+  feedMins:{min:0, max:120, unit:'min', label:'Feed duration'},
+  feedMl:{min:0, max:1000, unit:'mL', label:'Feed amount'},
+  pumpMins:{min:0, max:120, unit:'min', label:'Pumping duration'},
+  sleepMins:{min:0, max:1440, unit:'min', label:'Sleep duration'}
+};
+function checkBounds(value, key){
+  const b = FIELD_BOUNDS[key];
+  if(!b) return null;
+  if(isNaN(value)) return `Enter a valid ${b.label.toLowerCase()}`;
+  if(value < b.min || value > b.max) return `${b.label} should be between ${b.min} and ${b.max}${b.unit}`;
+  return null;
+}
+/* Preserves whatever the user has typed in the open sheet across a same-step
+   re-render (changing the time, revealing the note field, switching a segment). */
+function fVal(id, fallback){ return (sheetDraft[id] !== undefined) ? sheetDraft[id] : (fallback==null ? '' : fallback); }
+function captureSheetDraft(){
+  const panel = document.getElementById('sheetPanel');
+  if(!panel) return;
+  panel.querySelectorAll('input, textarea, select').forEach(el=>{
+    if(el.type==='file' || !el.id) return;
+    sheetDraft[el.id] = el.value;
+  });
+}
+function updateEntry(kind, id, patch){
+  const m = DELETE_MAP[kind];
+  if(!m) return false;
+  const idx = state[m.arr].findIndex(x=>x.id===id);
+  if(idx===-1) return false;
+  state[m.arr][idx] = Object.assign({}, state[m.arr][idx], patch);
+  return true;
+}
+async function deleteEntryWithUndo(kind, id){
+  const m = DELETE_MAP[kind];
+  if(!m || !id) return;
+  const idx = state[m.arr].findIndex(x=>x.id===id);
+  if(idx===-1) return;
+  const removed = state[m.arr][idx];
+  state[m.arr].splice(idx,1);
+  await saveKey(m.key, state[m.arr]);
+  closeSheet(); renderMain();
+  showUndoToast('Deleted', async ()=>{
+    state[m.arr].splice(idx,0,removed);
+    await saveKey(m.key, state[m.arr]);
+    renderMain();
+  });
+}
+function cancelEditing(){ editingKind=null; editingId=null; editingItem=null; }
+function openEntryActions(kind, id){
+  entryActionKind = kind; entryActionId = id;
+  sheetOpen = true; sheetStep = 'entryActions'; sheetShowTime=false; sheetShowDetails=false; sheetDraft={};
   renderSheet();
 }
-function openSheet(step){ sheetOpen=true; goToStep(step||'menu'); }
+function startEditEntry(kind, id){
+  const m = DELETE_MAP[kind];
+  const item = m ? state[m.arr].find(x=>x.id===id) : null;
+  if(!item || !KIND_TO_STEP[kind]) return;
+  editingKind = kind; editingId = id; editingItem = item;
+  sheetDraft = {};
+  sheetShowTime = true;
+  sheetShowDetails = true;
+  if(kind==='feed'){ currentFeedSubtype = item.type; sheetPumpForced = false; }
+  if(kind==='nappy'){ currentNappyType = item.type; }
+  if(kind==='sleep'){ currentSleepType = item.label; }
+  if(kind==='temperature'){ currentTempMethod = item.method; }
+  if(kind==='healthRecord'){ currentHealthCat = item.category; }
+  sheetOpen = true;
+  sheetStep = KIND_TO_STEP[kind];
+  renderSheet();
+}
+function openDetailSheet(kind, id){
+  sheetDetailKind = kind; sheetDetailId = id;
+  sheetOpen = true; sheetStep = 'detail'; sheetShowTime=false; sheetShowDetails=false; sheetDraft={};
+  renderSheet();
+}
+function openSheet(step){ cancelEditing(); sheetOpen=true; goToStep(step||'menu'); }
 function closeSheet(){
   sheetOpen=false;
+  cancelEditing();
   const overlay=document.getElementById('sheetOverlay');
   if(overlay) overlay.classList.remove('open');
 }
@@ -1238,6 +1328,8 @@ function flashButtonSuccess(id, label){
   });
 }
 function goToStep(key){
+  cancelEditing();
+  sheetDraft = {};
   sheetShowTime=false; sheetShowDetails=false;
   if(key==='pump'){ sheetStep='feed'; sheetPumpForced=true; }
   else { sheetStep=key; sheetPumpForced=false; }
@@ -1255,8 +1347,16 @@ function renderSheet(){
     overlay.classList.remove('open');
   }
 }
-function nowTimeRow(inputId, dateOnly){
-  const val = dateOnly ? todayDateInput() : todayInput();
+function nowTimeRow(inputId, dateOnly, prefillISO){
+  let val;
+  if(sheetDraft[inputId] !== undefined){
+    val = sheetDraft[inputId];
+  } else if(prefillISO){
+    if(dateOnly){ val = sydDateKey(prefillISO); }
+    else { const p = sydDateParts(prefillISO); val = `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; }
+  } else {
+    val = dateOnly ? todayDateInput() : todayInput();
+  }
   if(!sheetShowTime){
     return `<div class="ql-nowrow"><span>Now</span><button data-showtime="1">Change</button><input type="hidden" id="${inputId}" value="${val}"></div>`;
   }
@@ -1270,9 +1370,23 @@ function renderSheetContent(){
   if(sheetStep==='temp') return renderQuickLogTemp();
   if(sheetStep==='weight') return renderQuickLogWeight();
   if(sheetStep==='moment') return renderQuickLogMoment();
+  if(sheetStep==='healthnote') return renderQuickLogHealthNote();
+  if(sheetStep==='entryActions') return renderEntryActions();
   if(sheetStep==='detail') return renderDetailSheet();
   if(sheetStep==='restoreConfirm') return renderRestoreConfirmSheet();
   return '';
+}
+function renderEntryActions(){
+  const m = DELETE_MAP[entryActionKind];
+  const item = m ? state[m.arr].find(x=>x.id===entryActionId) : null;
+  if(!item) return `<div class="sheet-title">Entry</div><div class="empty">This entry was removed.</div>`;
+  return `
+    <div class="sheet-title">Entry options</div>
+    <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
+      <button data-entryedit="1">Edit</button>
+      <button data-entrydelete="1" class="danger">Delete</button>
+    </div>
+  `;
 }
 function renderDetailSheet(){
   const m = DELETE_MAP[sheetDetailKind];
@@ -1289,10 +1403,14 @@ function renderDetailSheet(){
   else if(sheetDetailKind==='healthRecord'){ title=item.title; lines=[fmtDateTime(item.date), item.details]; }
   else if(sheetDetailKind==='milestone'){ title=item.title; lines=[`${fmtDate(item.date)} · ${momentAgeLabel(item.date)}`, item.note]; }
   lines = lines.filter(Boolean);
+  const canEdit = !!KIND_TO_STEP[sheetDetailKind];
   return `
     <div class="sheet-title">${escapeHtml(title)}</div>
     ${lines.map(l=>`<div class="support-text" style="margin-top:2px;">${escapeHtml(l)}</div>`).join('')}
-    <button class="btn" style="background:var(--status-critical-fg);margin-top:20px;" id="detailDeleteBtn">Delete entry</button>
+    <div class="menu-panel" style="margin-top:20px;">
+      ${canEdit ? `<button data-detailedit="1">Edit</button>` : ''}
+      <button data-detaildelete="1" class="danger">Delete</button>
+    </div>
   `;
 }
 function renderRestoreConfirmSheet(){
@@ -1341,18 +1459,20 @@ function renderQuickLogMenu(){
 }
 function renderQuickLogNappy(){
   if(sheetShowDetails){
+    const isEdit = editingKind==='nappy';
     return `
-      <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Nappy details</div>
+      <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit nappy':'Nappy details'}</div>
       <label>Type</label>
       <div class="seg" id="nappyTypeSeg">
         <button data-nt="wet" class="${currentNappyType==='wet'?'active':''}">Wet</button>
         <button data-nt="poo" class="${currentNappyType==='poo'?'active':''}">Poo</button>
         <button data-nt="both" class="${currentNappyType==='both'?'active':''}">Both</button>
       </div>
-      ${nowTimeRow('nappyDateInput')}
+      ${nowTimeRow('nappyDateInput', false, isEdit?editingItem.date:null)}
       <label>Note (optional)</label>
-      <input type="text" id="nappyNoteInput" placeholder="optional">
-      <button class="btn" id="saveNappyDetailed">Save nappy</button>
+      <input type="text" id="nappyNoteInput" placeholder="optional" value="${escapeHtml(fVal('nappyNoteInput', isEdit?editingItem.note:''))}">
+      <button class="btn" id="saveNappyDetailed">${isEdit?'Save changes':'Save nappy'}</button>
+      ${isEdit ? `<button class="ql-link" id="deleteNappyBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
     `;
   }
   return `
@@ -1366,6 +1486,7 @@ function renderQuickLogNappy(){
   `;
 }
 function renderQuickLogFeed(forcePump){
+  const isEdit = editingKind==='feed';
   const subtype = forcePump ? 'pumping' : currentFeedSubtype;
   const subs = [
     {key:'breastfeeding', label:'Breast'},
@@ -1375,90 +1496,125 @@ function renderQuickLogFeed(forcePump){
   ];
   let fields = '';
   if(subtype==='breastfeeding'){
+    const left = isEdit && editingItem.type==='breastfeeding' ? editingItem.leftMins : '';
+    const right = isEdit && editingItem.type==='breastfeeding' ? editingItem.rightMins : '';
     fields = `
       <div class="fieldrow">
-        <div><label>Left (min)</label><input type="number" inputmode="numeric" id="qlFeedLeft" placeholder="0" autofocus></div>
-        <div><label>Right (min)</label><input type="number" inputmode="numeric" id="qlFeedRight" placeholder="0"></div>
+        <div><label>Left (min)</label><input type="number" inputmode="numeric" id="qlFeedLeft" placeholder="0" value="${fVal('qlFeedLeft', left)}" autofocus></div>
+        <div><label>Right (min)</label><input type="number" inputmode="numeric" id="qlFeedRight" placeholder="0" value="${fVal('qlFeedRight', right)}"></div>
       </div>
       ${state.prefs && state.prefs.lastBreastSide ? `<div class="meta-text">Last breast used: ${state.prefs.lastBreastSide}</div>` : ''}
     `;
   } else if(subtype==='expressed' || subtype==='formula'){
+    const offered = isEdit && editingItem.type===subtype ? editingItem.offeredMl : '';
+    const consumed = isEdit && editingItem.type===subtype ? editingItem.consumedMl : '';
     fields = `
       <div class="fieldrow">
-        <div><label>Offered (mL)</label><input type="number" inputmode="numeric" id="qlFeedOffered" placeholder="90" autofocus></div>
-        <div><label>Consumed (mL)</label><input type="number" inputmode="numeric" id="qlFeedConsumed" placeholder="90"></div>
+        <div><label>Offered (mL)</label><input type="number" inputmode="numeric" id="qlFeedOffered" placeholder="90" value="${fVal('qlFeedOffered', offered)}" autofocus></div>
+        <div><label>Consumed (mL)</label><input type="number" inputmode="numeric" id="qlFeedConsumed" placeholder="90" value="${fVal('qlFeedConsumed', consumed)}"></div>
       </div>
     `;
   } else if(subtype==='pumping'){
+    const pl = isEdit && editingItem.type==='pumping' ? editingItem.pumpLeftMl : '';
+    const pr = isEdit && editingItem.type==='pumping' ? editingItem.pumpRightMl : '';
+    const pd = isEdit && editingItem.type==='pumping' ? editingItem.pumpDurationMin : '';
     fields = `
       <div class="fieldrow">
-        <div><label>Left (mL)</label><input type="number" inputmode="numeric" id="qlPumpLeft" placeholder="0" autofocus></div>
-        <div><label>Right (mL)</label><input type="number" inputmode="numeric" id="qlPumpRight" placeholder="0"></div>
+        <div><label>Left (mL)</label><input type="number" inputmode="numeric" id="qlPumpLeft" placeholder="0" value="${fVal('qlPumpLeft', pl)}" autofocus></div>
+        <div><label>Right (mL)</label><input type="number" inputmode="numeric" id="qlPumpRight" placeholder="0" value="${fVal('qlPumpRight', pr)}"></div>
       </div>
-      <label>Duration (min)</label><input type="number" inputmode="numeric" id="qlPumpDuration" placeholder="15">
+      <label>Duration (min)</label><input type="number" inputmode="numeric" id="qlPumpDuration" placeholder="15" value="${fVal('qlPumpDuration', pd)}">
     `;
   }
   return `
-    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${forcePump?'Pump':'Feed'}</div>
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit feed':(forcePump?'Pump':'Feed')}</div>
     ${forcePump ? '' : `<div class="seg" id="qlFeedSubtypeSeg">${subs.map(s=>`<button data-fs="${s.key}" class="${subtype===s.key?'active':''}">${s.label}</button>`).join('')}</div>`}
     ${fields}
-    ${nowTimeRow('qlFeedDate')}
-    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlFeedNote" placeholder="optional">` : `<button class="ql-link" id="qlFeedAddDetails">Add note</button>`}
-    <button class="btn" id="qlSaveFeed" data-subtype="${subtype}">Save feed</button>
+    ${nowTimeRow('qlFeedDate', false, isEdit?editingItem.date:null)}
+    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlFeedNote" placeholder="optional" value="${escapeHtml(fVal('qlFeedNote', isEdit?editingItem.note:''))}">` : `<button class="ql-link" id="qlFeedAddDetails">Add note</button>`}
+    <button class="btn" id="qlSaveFeed" data-subtype="${subtype}">${isEdit?'Save changes':'Save feed'}</button>
+    ${isEdit ? `<button class="ql-link" id="deleteFeedBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
 function renderQuickLogSleep(){
+  const isEdit = editingKind==='sleep';
   return `
-    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Sleep</div>
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit sleep':'Sleep'}</div>
     <div class="seg" id="qlSleepTypeSeg">
       <button data-s="nap" class="${currentSleepType==='nap'?'active':''}">Nap</button>
       <button data-s="night" class="${currentSleepType==='night'?'active':''}">Night</button>
     </div>
     <label>Duration (minutes)</label>
-    <input type="number" inputmode="numeric" id="qlSleepMins" placeholder="90" autofocus>
-    ${nowTimeRow('qlSleepDate')}
-    <button class="btn" id="qlSaveSleep">Save sleep</button>
+    <input type="number" inputmode="numeric" id="qlSleepMins" placeholder="90" value="${fVal('qlSleepMins', isEdit?editingItem.mins:'')}" autofocus>
+    ${nowTimeRow('qlSleepDate', false, isEdit?editingItem.date:null)}
+    <button class="btn" id="qlSaveSleep">${isEdit?'Save changes':'Save sleep'}</button>
+    ${isEdit ? `<button class="ql-link" id="deleteSleepBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
 function renderQuickLogTemp(){
+  const isEdit = editingKind==='temperature';
   const methods = ['axillary','rectal','ear','forehead','other'];
+  const methodVal = fVal('qlTempMethod', isEdit?editingItem.method:currentTempMethod);
   return `
-    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Temperature</div>
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit temperature':'Temperature'}</div>
     <label>Temperature (°C)</label>
-    <input type="number" step="0.1" inputmode="decimal" id="qlTempVal" placeholder="37.1" autofocus>
+    <input type="number" step="0.1" inputmode="decimal" id="qlTempVal" placeholder="37.1" value="${fVal('qlTempVal', isEdit?editingItem.tempC:'')}" autofocus>
     <label>Method</label>
-    <select id="qlTempMethod">${methods.map(m=>`<option value="${m}" ${currentTempMethod===m?'selected':''}>${m.charAt(0).toUpperCase()+m.slice(1)}</option>`).join('')}</select>
-    ${nowTimeRow('qlTempDate')}
-    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlTempNote" placeholder="optional">` : `<button class="ql-link" id="qlTempAddDetails">Add note</button>`}
-    <button class="btn" id="qlSaveTemp">Save temperature</button>
+    <select id="qlTempMethod">${methods.map(m=>`<option value="${m}" ${methodVal===m?'selected':''}>${m.charAt(0).toUpperCase()+m.slice(1)}</option>`).join('')}</select>
+    ${nowTimeRow('qlTempDate', false, isEdit?editingItem.date:null)}
+    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlTempNote" placeholder="optional" value="${escapeHtml(fVal('qlTempNote', isEdit?editingItem.note:''))}">` : `<button class="ql-link" id="qlTempAddDetails">Add note</button>`}
+    <button class="btn" id="qlSaveTemp">${isEdit?'Save changes':'Save temperature'}</button>
+    ${isEdit ? `<button class="ql-link" id="deleteTempBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
 function renderQuickLogWeight(){
+  const isEdit = editingKind==='measurement';
+  const mtype = isEdit ? editingItem.type : 'weight';
+  const mtypeLabel = mtype==='weight'?'Weight (kg)':mtype==='length'?'Length (cm)':'Head circumference (cm)';
   return `
-    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Measurement</div>
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit measurement':'Measurement'}</div>
     <div class="seg" id="qlMeasureTypeSeg">
-      <button data-mt="weight" class="active">Weight</button>
-      <button data-mt="length">Length</button>
-      <button data-mt="hc">Head</button>
+      <button data-mt="weight" class="${mtype==='weight'?'active':''}">Weight</button>
+      <button data-mt="length" class="${mtype==='length'?'active':''}">Length</button>
+      <button data-mt="hc" class="${mtype==='hc'?'active':''}">Head</button>
     </div>
-    <label id="qlMeasureLabel">Weight (kg)</label>
-    <input type="number" step="0.01" inputmode="decimal" id="qlMeasureVal" placeholder="e.g. 3.65" autofocus>
-    ${nowTimeRow('qlMeasureDate')}
-    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlMeasureNote" placeholder="optional">` : `<button class="ql-link" id="qlMeasureAddDetails">Add note</button>`}
-    <button class="btn" id="qlSaveMeasure" data-mtype="weight">Save measurement</button>
+    <label id="qlMeasureLabel">${mtypeLabel}</label>
+    <input type="number" step="0.01" inputmode="decimal" id="qlMeasureVal" placeholder="e.g. 3.65" value="${fVal('qlMeasureVal', isEdit?editingItem.value:'')}" autofocus>
+    ${nowTimeRow('qlMeasureDate', false, isEdit?editingItem.date:null)}
+    ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlMeasureNote" placeholder="optional" value="${escapeHtml(fVal('qlMeasureNote', isEdit?editingItem.note:''))}">` : `<button class="ql-link" id="qlMeasureAddDetails">Add note</button>`}
+    <button class="btn" id="qlSaveMeasure" data-mtype="${mtype}">${isEdit?'Save changes':'Save measurement'}</button>
+    ${isEdit ? `<button class="ql-link" id="deleteMeasureBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
 function renderQuickLogMoment(){
+  const isEdit = editingKind==='milestone';
   return `
-    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Moment</div>
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit moment':'Moment'}</div>
     <label>What happened</label>
-    <input type="text" id="qlMomentTitle" placeholder="e.g. First smile" autofocus>
-    ${nowTimeRow('qlMomentDate', true)}
+    <input type="text" id="qlMomentTitle" placeholder="e.g. First smile" value="${escapeHtml(fVal('qlMomentTitle', isEdit?editingItem.title:''))}" autofocus>
+    ${nowTimeRow('qlMomentDate', true, isEdit?editingItem.date:null)}
     ${sheetShowDetails ? `
       <label>Photo (optional)</label><input type="file" accept="image/*" id="qlMomentPhoto">
-      <label>Note (optional)</label><textarea id="qlMomentNote" rows="2" placeholder="optional"></textarea>
+      ${isEdit && editingItem.photo ? `<div class="meta-text">A photo is already attached — choosing a new one will replace it.</div>` : ''}
+      <label>Note (optional)</label><textarea id="qlMomentNote" rows="2" placeholder="optional">${escapeHtml(fVal('qlMomentNote', isEdit?editingItem.note:''))}</textarea>
     ` : `<button class="ql-link" id="qlMomentAddDetails">Add photo &amp; note</button>`}
-    <button class="btn" id="qlSaveMoment">Save moment</button>
+    <button class="btn" id="qlSaveMoment">${isEdit?'Save changes':'Save moment'}</button>
+    ${isEdit ? `<button class="ql-link" id="deleteMomentBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
+  `;
+}
+function renderQuickLogHealthNote(){
+  const isEdit = editingKind==='healthRecord';
+  const cats = [{k:'symptom',l:'Symptom / illness'},{k:'medication',l:'Medication'},{k:'advice',l:'Doctor advice'},{k:'note',l:'Health note'},{k:'other',l:'Other'}];
+  const catVal = fVal('qlHealthCat', isEdit?editingItem.category:currentHealthCat);
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Edit health record</div>
+    <label>Category</label>
+    <select id="qlHealthCat">${cats.map(c=>`<option value="${c.k}" ${catVal===c.k?'selected':''}>${c.l}</option>`).join('')}</select>
+    <label>Title</label><input type="text" id="qlHealthTitle" value="${escapeHtml(fVal('qlHealthTitle', isEdit?editingItem.title:''))}">
+    ${nowTimeRow('qlHealthDate', false, isEdit?editingItem.date:null)}
+    <label>Details (optional)</label><textarea id="qlHealthDetails" rows="2" placeholder="optional">${escapeHtml(fVal('qlHealthDetails', isEdit?editingItem.details:''))}</textarea>
+    <button class="btn" id="qlSaveHealthNote">Save changes</button>
+    <button class="ql-link" id="deleteHealthNoteBtn" style="color:var(--status-critical-fg);">Delete entry</button>
   `;
 }
 function bindSheet(){
@@ -1471,7 +1627,7 @@ function bindSheet(){
     b.addEventListener('click', ()=> goToStep('menu'));
   });
   document.querySelectorAll('[data-showtime]').forEach(b=>{
-    b.addEventListener('click', ()=>{ sheetShowTime=true; renderSheet(); });
+    b.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowTime=true; renderSheet(); });
   });
 
   document.querySelectorAll('[data-nappyquick]').forEach(b=>{
@@ -1490,82 +1646,115 @@ function bindSheet(){
     });
   });
   const qlND = document.getElementById('qlNappyDetails');
-  if(qlND) qlND.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  if(qlND) qlND.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowDetails=true; renderSheet(); });
   document.querySelectorAll('#nappyTypeSeg [data-nt]').forEach(b=>{
-    b.addEventListener('click', ()=>{ currentNappyType=b.dataset.nt; renderSheet(); });
+    b.addEventListener('click', ()=>{ captureSheetDraft(); currentNappyType=b.dataset.nt; renderSheet(); });
   });
   const saveNappyDetailed = document.getElementById('saveNappyDetailed');
   if(saveNappyDetailed) saveNappyDetailed.addEventListener('click', async ()=>{
     const date = document.getElementById('nappyDateInput').value;
     const note = document.getElementById('nappyNoteInput').value.trim();
     if(!date){ toast('Pick a time'); return; }
-    state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note});
+    if(editingKind==='nappy' && editingId){
+      updateEntry('nappy', editingId, {type:currentNappyType, date:new Date(date).toISOString(), note});
+    } else {
+      state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note});
+    }
     await saveKey('nappies', state.nappies);
     await flashButtonSuccess('saveNappyDetailed', '✓ Logged'); closeSheet(); renderMain();
   });
+  const delNappy = document.getElementById('deleteNappyBtn');
+  if(delNappy) delNappy.addEventListener('click', ()=> deleteEntryWithUndo('nappy', editingId));
 
   document.querySelectorAll('#qlFeedSubtypeSeg [data-fs]').forEach(b=>{
-    b.addEventListener('click', ()=>{ currentFeedSubtype=b.dataset.fs; sheetPumpForced=false; renderSheet(); });
+    b.addEventListener('click', ()=>{ captureSheetDraft(); currentFeedSubtype=b.dataset.fs; sheetPumpForced=false; renderSheet(); });
   });
   const qlFeedAddDetails = document.getElementById('qlFeedAddDetails');
-  if(qlFeedAddDetails) qlFeedAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  if(qlFeedAddDetails) qlFeedAddDetails.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowDetails=true; renderSheet(); });
   const saveFeedBtn = document.getElementById('qlSaveFeed');
   if(saveFeedBtn) saveFeedBtn.addEventListener('click', async ()=>{
     const subtype = saveFeedBtn.dataset.subtype;
     const date = document.getElementById('qlFeedDate').value;
-    const note = sheetShowDetails ? (document.getElementById('qlFeedNote')?.value.trim()||'') : '';
-    let entry = {id:uid(), type:subtype, date:new Date(date).toISOString(), note};
+    const note = document.getElementById('qlFeedNote') ? document.getElementById('qlFeedNote').value.trim() : '';
+    let patch = { type:subtype, date:new Date(date).toISOString(), note };
     if(subtype==='breastfeeding'){
       const left = parseFloat(document.getElementById('qlFeedLeft').value)||0;
       const right = parseFloat(document.getElementById('qlFeedRight').value)||0;
       if(left===0 && right===0){ toast('Enter a duration for at least one side'); return; }
-      entry.leftMins=left; entry.rightMins=right; entry.totalMins=left+right;
+      let err = checkBounds(left, 'feedMins') || checkBounds(right, 'feedMins');
+      if(err){ toast(err); return; }
+      patch.leftMins=left; patch.rightMins=right; patch.totalMins=left+right;
       state.prefs = state.prefs||{};
       state.prefs.lastBreastSide = (left>0 && right===0) ? 'Left' : (right>0 && left===0) ? 'Right' : 'Both';
     } else if(subtype==='expressed' || subtype==='formula'){
-      entry.offeredMl = parseFloat(document.getElementById('qlFeedOffered').value)||0;
-      entry.consumedMl = parseFloat(document.getElementById('qlFeedConsumed').value)||0;
+      const offered = parseFloat(document.getElementById('qlFeedOffered').value)||0;
+      const consumed = parseFloat(document.getElementById('qlFeedConsumed').value)||0;
+      let err = checkBounds(offered, 'feedMl') || checkBounds(consumed, 'feedMl');
+      if(err){ toast(err); return; }
+      patch.offeredMl = offered; patch.consumedMl = consumed;
     } else if(subtype==='pumping'){
-      entry.pumpLeftMl = parseFloat(document.getElementById('qlPumpLeft').value)||0;
-      entry.pumpRightMl = parseFloat(document.getElementById('qlPumpRight').value)||0;
-      entry.pumpTotalMl = entry.pumpLeftMl+entry.pumpRightMl;
-      entry.pumpDurationMin = parseFloat(document.getElementById('qlPumpDuration').value)||0;
+      const pl = parseFloat(document.getElementById('qlPumpLeft').value)||0;
+      const pr = parseFloat(document.getElementById('qlPumpRight').value)||0;
+      const pd = parseFloat(document.getElementById('qlPumpDuration').value)||0;
+      let err = checkBounds(pl, 'feedMl') || checkBounds(pr, 'feedMl') || checkBounds(pd, 'pumpMins');
+      if(err){ toast(err); return; }
+      patch.pumpLeftMl=pl; patch.pumpRightMl=pr; patch.pumpTotalMl=pl+pr; patch.pumpDurationMin=pd;
     }
     state.prefs = state.prefs||{};
     if(!sheetPumpForced) state.prefs.lastFeedType = subtype;
-    state.feeds.push(entry);
+    if(editingKind==='feed' && editingId){
+      updateEntry('feed', editingId, patch);
+    } else {
+      state.feeds.push(Object.assign({id:uid()}, patch));
+    }
     await saveKey('feeds', state.feeds);
     await flashButtonSuccess('qlSaveFeed', '✓ Logged'); closeSheet(); renderMain();
   });
+  const delFeed = document.getElementById('deleteFeedBtn');
+  if(delFeed) delFeed.addEventListener('click', ()=> deleteEntryWithUndo('feed', editingId));
 
   document.querySelectorAll('#qlSleepTypeSeg [data-s]').forEach(b=>{
-    b.addEventListener('click', ()=>{ currentSleepType=b.dataset.s; renderSheet(); });
+    b.addEventListener('click', ()=>{ captureSheetDraft(); currentSleepType=b.dataset.s; renderSheet(); });
   });
   const saveSleepBtn = document.getElementById('qlSaveSleep');
   if(saveSleepBtn) saveSleepBtn.addEventListener('click', async ()=>{
     const mins = parseInt(document.getElementById('qlSleepMins').value);
     const date = document.getElementById('qlSleepDate').value;
     if(!mins){ toast('Enter a duration'); return; }
-    state.sleeps.push({id:uid(), date:new Date(date).toISOString(), label:currentSleepType, mins});
+    const err = checkBounds(mins, 'sleepMins'); if(err){ toast(err); return; }
+    if(editingKind==='sleep' && editingId){
+      updateEntry('sleep', editingId, {date:new Date(date).toISOString(), label:currentSleepType, mins});
+    } else {
+      state.sleeps.push({id:uid(), date:new Date(date).toISOString(), label:currentSleepType, mins});
+    }
     await saveKey('sleep', state.sleeps);
     await flashButtonSuccess('qlSaveSleep', '✓ Logged'); closeSheet(); renderMain();
   });
+  const delSleep = document.getElementById('deleteSleepBtn');
+  if(delSleep) delSleep.addEventListener('click', ()=> deleteEntryWithUndo('sleep', editingId));
 
   const qlTempAddDetails = document.getElementById('qlTempAddDetails');
-  if(qlTempAddDetails) qlTempAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  if(qlTempAddDetails) qlTempAddDetails.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowDetails=true; renderSheet(); });
   const saveTempBtn = document.getElementById('qlSaveTemp');
   if(saveTempBtn) saveTempBtn.addEventListener('click', async ()=>{
     const val = parseFloat(document.getElementById('qlTempVal').value);
     const method = document.getElementById('qlTempMethod').value;
     const date = document.getElementById('qlTempDate').value;
     if(!val){ toast('Enter a temperature'); return; }
-    const note = sheetShowDetails ? (document.getElementById('qlTempNote')?.value.trim()||'') : '';
+    const err = checkBounds(val, 'tempC'); if(err){ toast(err); return; }
+    const note = document.getElementById('qlTempNote') ? document.getElementById('qlTempNote').value.trim() : '';
     currentTempMethod = method;
     state.prefs = state.prefs||{}; state.prefs.lastTempMethod = method;
-    state.temperatures.push({id:uid(), tempC:val, method, date:new Date(date).toISOString(), note});
+    if(editingKind==='temperature' && editingId){
+      updateEntry('temperature', editingId, {tempC:val, method, date:new Date(date).toISOString(), note});
+    } else {
+      state.temperatures.push({id:uid(), tempC:val, method, date:new Date(date).toISOString(), note});
+    }
     await saveKey('temperatures', state.temperatures);
     await flashButtonSuccess('qlSaveTemp', '✓ Logged'); closeSheet(); renderMain();
   });
+  const delTemp = document.getElementById('deleteTempBtn');
+  if(delTemp) delTemp.addEventListener('click', ()=> deleteEntryWithUndo('temperature', editingId));
 
   document.querySelectorAll('#qlMeasureTypeSeg [data-mt]').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -1577,56 +1766,78 @@ function bindSheet(){
     });
   });
   const qlMeasureAddDetails = document.getElementById('qlMeasureAddDetails');
-  if(qlMeasureAddDetails) qlMeasureAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  if(qlMeasureAddDetails) qlMeasureAddDetails.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowDetails=true; renderSheet(); });
   const saveMeasureBtn = document.getElementById('qlSaveMeasure');
   if(saveMeasureBtn) saveMeasureBtn.addEventListener('click', async ()=>{
     const mtype = saveMeasureBtn.dataset.mtype || 'weight';
     const val = parseFloat(document.getElementById('qlMeasureVal').value);
     const date = document.getElementById('qlMeasureDate').value;
     if(!val){ toast('Enter a value'); return; }
-    const note = sheetShowDetails ? (document.getElementById('qlMeasureNote')?.value.trim()||'') : '';
-    state.measurements.push({id:uid(), type:mtype, date:new Date(date).toISOString(), value:val, note});
+    const err = checkBounds(val, mtype); if(err){ toast(err); return; }
+    const note = document.getElementById('qlMeasureNote') ? document.getElementById('qlMeasureNote').value.trim() : '';
+    if(editingKind==='measurement' && editingId){
+      updateEntry('measurement', editingId, {type:mtype, date:new Date(date).toISOString(), value:val, note});
+    } else {
+      state.measurements.push({id:uid(), type:mtype, date:new Date(date).toISOString(), value:val, note});
+    }
     await saveKey('measurements', state.measurements);
     await flashButtonSuccess('qlSaveMeasure', '✓ Logged'); closeSheet(); renderMain();
   });
+  const delMeasure = document.getElementById('deleteMeasureBtn');
+  if(delMeasure) delMeasure.addEventListener('click', ()=> deleteEntryWithUndo('measurement', editingId));
 
   const qlMomentAddDetails = document.getElementById('qlMomentAddDetails');
-  if(qlMomentAddDetails) qlMomentAddDetails.addEventListener('click', ()=>{ sheetShowDetails=true; renderSheet(); });
+  if(qlMomentAddDetails) qlMomentAddDetails.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowDetails=true; renderSheet(); });
   const saveMomentBtn = document.getElementById('qlSaveMoment');
   if(saveMomentBtn) saveMomentBtn.addEventListener('click', async ()=>{
     const title = document.getElementById('qlMomentTitle').value.trim();
     const date = document.getElementById('qlMomentDate').value;
     if(!title){ toast('Enter what happened'); return; }
-    let photo=null, note='';
-    if(sheetShowDetails){
-      note = document.getElementById('qlMomentNote')?.value.trim()||'';
-      const fileInput = document.getElementById('qlMomentPhoto');
-      if(fileInput && fileInput.files && fileInput.files[0]){
-        try{ photo = await readAndCompressImage(fileInput.files[0], 640, 0.6); }
-        catch(e){ console.error(e); }
-      }
+    let photo = (editingKind==='milestone' && editingItem) ? editingItem.photo : null;
+    let note = document.getElementById('qlMomentNote') ? document.getElementById('qlMomentNote').value.trim() : '';
+    const fileInput = document.getElementById('qlMomentPhoto');
+    if(fileInput && fileInput.files && fileInput.files[0]){
+      try{ photo = await readAndCompressImage(fileInput.files[0], 640, 0.6); }
+      catch(e){ console.error(e); }
     }
-    state.milestones.push({id:uid(), title, date:new Date(date).toISOString(), note, photo});
+    if(editingKind==='milestone' && editingId){
+      updateEntry('milestone', editingId, {title, date:new Date(date).toISOString(), note, photo});
+    } else {
+      state.milestones.push({id:uid(), title, date:new Date(date).toISOString(), note, photo});
+    }
     await saveKey('milestones', state.milestones);
     await flashButtonSuccess('qlSaveMoment', '✓ Saved'); closeSheet(); renderMain();
   });
+  const delMoment = document.getElementById('deleteMomentBtn');
+  if(delMoment) delMoment.addEventListener('click', ()=> deleteEntryWithUndo('milestone', editingId));
 
-  const detailDel = document.getElementById('detailDeleteBtn');
-  if(detailDel) detailDel.addEventListener('click', async ()=>{
-    const m = DELETE_MAP[sheetDetailKind];
-    if(!m) return;
-    const idx = state[m.arr].findIndex(x=>x.id===sheetDetailId);
-    if(idx===-1) return;
-    const removed = state[m.arr][idx];
-    state[m.arr].splice(idx,1);
-    await saveKey(m.key, state[m.arr]);
-    closeSheet(); renderMain();
-    showUndoToast('Deleted', async ()=>{
-      state[m.arr].splice(idx,0,removed);
-      await saveKey(m.key, state[m.arr]);
-      renderMain();
-    });
+  const saveHealthNoteBtn = document.getElementById('qlSaveHealthNote');
+  if(saveHealthNoteBtn) saveHealthNoteBtn.addEventListener('click', async ()=>{
+    const cat = document.getElementById('qlHealthCat').value;
+    const title = document.getElementById('qlHealthTitle').value.trim();
+    const date = document.getElementById('qlHealthDate').value;
+    const details = document.getElementById('qlHealthDetails').value.trim();
+    if(!title || !date){ toast('Enter a title and time'); return; }
+    currentHealthCat = cat;
+    state.prefs = state.prefs||{}; state.prefs.lastHealthCat = cat;
+    if(editingKind==='healthRecord' && editingId){
+      updateEntry('healthRecord', editingId, {category:cat, title, date:new Date(date).toISOString(), details});
+      await saveKey('healthRecords', state.healthRecords);
+    }
+    await flashButtonSuccess('qlSaveHealthNote', '✓ Saved'); closeSheet(); renderMain();
   });
+  const delHealthNote = document.getElementById('deleteHealthNoteBtn');
+  if(delHealthNote) delHealthNote.addEventListener('click', ()=> deleteEntryWithUndo('healthRecord', editingId));
+
+  const entryEditBtn = document.querySelector('[data-entryedit]');
+  if(entryEditBtn) entryEditBtn.addEventListener('click', ()=> startEditEntry(entryActionKind, entryActionId));
+  const entryDeleteBtn = document.querySelector('[data-entrydelete]');
+  if(entryDeleteBtn) entryDeleteBtn.addEventListener('click', ()=> deleteEntryWithUndo(entryActionKind, entryActionId));
+
+  const detailEditBtn = document.querySelector('[data-detailedit]');
+  if(detailEditBtn) detailEditBtn.addEventListener('click', ()=> startEditEntry(sheetDetailKind, sheetDetailId));
+  const detailDeleteBtn2 = document.querySelector('[data-detaildelete]');
+  if(detailDeleteBtn2) detailDeleteBtn2.addEventListener('click', ()=> deleteEntryWithUndo(sheetDetailKind, sheetDetailId));
 
   const confirmRestoreBtn = document.getElementById('confirmRestoreBtn');
   if(confirmRestoreBtn) confirmRestoreBtn.addEventListener('click', async ()=>{
@@ -3427,21 +3638,11 @@ const DELETE_MAP = {
 };
 function bindDeletes(){
   document.querySelectorAll('button.del, button.del-x').forEach(b=>{
-    b.addEventListener('click', async ()=>{
+    b.addEventListener('click', (e)=>{
+      e.stopPropagation();
       const id=b.dataset.id, kind=b.dataset.kind;
-      const m = DELETE_MAP[kind];
-      if(!m) return;
-      const idx = state[m.arr].findIndex(x=>x.id===id);
-      if(idx===-1) return;
-      const removed = state[m.arr][idx];
-      state[m.arr].splice(idx,1);
-      await saveKey(m.key, state[m.arr]);
-      renderMain();
-      showUndoToast('Deleted', async ()=>{
-        state[m.arr].splice(idx,0,removed);
-        await saveKey(m.key, state[m.arr]);
-        renderMain();
-      });
+      if(!DELETE_MAP[kind]) return;
+      openEntryActions(kind, id);
     });
   });
 }
