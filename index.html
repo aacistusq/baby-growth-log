@@ -611,11 +611,13 @@ function safeRerender(){
 }
 /* Realtime sync: replaces the old 6-second polling. The other phone's changes
    land within moments, and unchanged state costs nothing. */
+let dataLoadError = null;
 function startRealtimeSync(){
   stopRealtimeSync();
   unsubscribeSnapshot = familyDocRef().onSnapshot(snap=>{
     const wasInitial = !initialDataLoaded;
     initialDataLoaded = true;
+    dataLoadError = null;
     if(suppressNextSnapshot && snap.metadata.hasPendingWrites===false){
       suppressNextSnapshot = false;
     }
@@ -637,12 +639,8 @@ function startRealtimeSync(){
     }
   }, err=>{
     console.error('snapshot error', err);
-    if(err && err.code==='permission-denied'){
-      toast('Access denied — check the Firestore rules include your account');
-    } else {
-      toast('Sync error — check your connection');
-    }
     initialDataLoaded = true;
+    dataLoadError = (err && err.code==='permission-denied') ? 'permission' : 'other';
     render();
   });
 }
@@ -1134,11 +1132,33 @@ function renderStartupError(message){
     </div>
   `;
 }
+function renderDataLoadError(){
+  const isPermission = dataLoadError==='permission';
+  return `
+    <div class="onboard" style="align-items:center;text-align:center;">
+      <div class="mark">🔒</div>
+      <h1 style="font-size:22px;">Couldn't load your data</h1>
+      <p class="sub">${isPermission
+        ? "You're signed in, but access to the family data was denied. Your data is very likely completely safe — this is almost always a Firestore rules mismatch, not data loss."
+        : "Something went wrong loading your data. This does not mean your data is lost — it's a connection issue."}</p>
+      ${isPermission ? `<div class="note" style="text-align:left;margin-top:4px;">Check in the Firebase console: Authentication → Users, and confirm the UID for the account you just signed in with (${authUser && authUser.email ? escapeHtml(authUser.email) : 'this account'}) exactly matches the UID pasted into Firestore → Rules.</div>` : ''}
+      <button class="btn" id="retryLoadBtn" style="margin-top:16px;">Try again</button>
+      <button class="ql-link" id="signOutFromErrorBtn">Sign out</button>
+    </div>
+  `;
+}
+function bindDataLoadError(){
+  const retry = document.getElementById('retryLoadBtn');
+  if(retry) retry.addEventListener('click', ()=>{ initialDataLoaded=false; dataLoadError=null; render(); startRealtimeSync(); });
+  const so = document.getElementById('signOutFromErrorBtn');
+  if(so) so.addEventListener('click', async ()=>{ try{ await signOutUser(); dataLoadError=null; } catch(e){ console.error(e); } });
+}
 function render(){
   const app = document.getElementById('app');
   if(!authReady){ app.innerHTML = renderLoadingScreen(); return; }
   if(!authUser){ app.innerHTML = renderLogin(); bindLogin(); return; }
   if(!initialDataLoaded){ app.innerHTML = renderLoadingScreen(); return; }
+  if(dataLoadError){ app.innerHTML = renderDataLoadError(); bindDataLoadError(); return; }
   if(!state.profile){ app.innerHTML = renderOnboard(); bindOnboard(); return; }
   app.innerHTML = `
     <header class="top">
@@ -3489,11 +3509,13 @@ function boot(){
       authUser = user;
       if(user){
         initialDataLoaded = false;
+        dataLoadError = null;
         render(); /* loading while first snapshot arrives */
         startRealtimeSync();
       } else {
         stopRealtimeSync();
         initialDataLoaded = false;
+        dataLoadError = null;
         applyRemote({}); /* clear in-memory data on sign-out */
         render(); /* login screen */
       }
