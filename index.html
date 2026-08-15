@@ -444,6 +444,7 @@
   .moment-viewer-img-wrap{ flex:1; display:flex; align-items:center; justify-content:center; padding:60px 10px 10px; overflow:hidden; min-height:0; }
   .moment-viewer-img-wrap img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; }
   .moment-viewer-info{ padding:16px 22px calc(26px + env(safe-area-inset-bottom)); color:#fff; }
+  .moment-viewer-navbtn{ position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.16); border:none; color:#fff; width:34px; height:34px; border-radius:50%; font-size:18px; cursor:pointer; }
   .rhythm-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; flex-shrink:0; }
   .rhythm-row{ display:flex; align-items:center; background:var(--card); border-radius:var(--radius-small); padding:3px 8px; box-shadow:var(--shadow-1); font-size:10.5px; font-weight:600; color:var(--ink); white-space:nowrap; cursor:pointer; }
   .insight-item{ padding:9px 0; border-bottom:1px dashed var(--line); font-size:12.5px; line-height:1.55; }
@@ -466,7 +467,41 @@
     #app{ max-width:100%; }
     main{ padding:0 6px 20px; }
     .card{ box-shadow:none; border:1px solid #ddd; break-inside:avoid; }
+    .book-page{ page-break-after:always; }
   }
+  /* Photo Book pages — themed via [data-book-theme] on the scroll container */
+  .book-preview-scale{ display:flex; flex-direction:column; gap:14px; }
+  .book-page{ background:#fff; color:#2a2420; border-radius:6px; box-shadow:var(--shadow-1); overflow:hidden; min-height:280px; display:flex; flex-direction:column; }
+  .book-cover-page{ position:relative; min-height:340px; justify-content:flex-end; }
+  .book-cover-img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .book-cover-text{ position:relative; z-index:1; padding:20px; background:linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0)); color:#fff; }
+  .book-cover-title{ font-family:'Baloo 2',cursive; font-size:26px; font-weight:700; }
+  .book-cover-subtitle{ font-size:14px; margin-top:2px; }
+  .book-cover-dates{ font-size:11px; opacity:0.85; margin-top:6px; }
+  .book-chapter-page{ align-items:center; justify-content:center; min-height:140px; }
+  .book-chapter-title{ font-family:'Baloo 2',cursive; font-size:20px; font-weight:700; text-align:center; padding:20px; }
+  .book-summary-page{ align-items:center; justify-content:center; text-align:center; padding:24px; min-height:140px; }
+  .book-summary-title{ font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:0.06em; opacity:0.55; margin-bottom:8px; }
+  .book-summary-line{ font-size:14px; margin-top:4px; }
+  .book-moment-page-full .book-photo-grid{ display:grid; grid-template-columns:1fr 1fr; }
+  .book-moment-page-full .book-photo-grid:has(img:only-child){ grid-template-columns:1fr; }
+  .book-photo{ width:100%; height:220px; object-fit:cover; display:block; }
+  .book-moment-caption{ padding:16px 20px; }
+  .book-moment-title{ font-family:'Baloo 2',cursive; font-size:17px; font-weight:700; }
+  .book-moment-meta{ font-size:11px; opacity:0.6; margin-top:2px; }
+  .book-moment-note{ font-size:12.5px; margin-top:8px; line-height:1.6; }
+  .book-moment-page-small{ padding:14px 18px; }
+  .book-photo-small{ width:100%; height:170px; object-fit:cover; border-radius:4px; display:block; margin-bottom:10px; }
+  .book-moment-title-small{ font-weight:700; font-size:13.5px; }
+  .book-moment-note-small{ font-size:11.5px; margin-top:5px; opacity:0.8; line-height:1.5; }
+  .book-letter-page{ padding:26px 22px; justify-content:center; }
+  .book-letter-heading{ font-family:'Baloo 2',cursive; font-size:15px; font-weight:700; margin-bottom:12px; }
+  .book-letter-text p{ font-size:13px; line-height:1.8; font-style:italic; margin:0 0 10px; }
+  [data-book-theme="soft"] .book-page{ background:#FBF3F6; }
+  [data-book-theme="soft"] .book-chapter-title, [data-book-theme="soft"] .book-moment-title, [data-book-theme="soft"] .book-letter-heading{ color:#8E6FB0; }
+  [data-book-theme="minimal"] .book-page{ background:#fff; border-radius:0; box-shadow:none; border-bottom:1px solid #eee; }
+  [data-book-theme="minimal"] .book-moment-title, [data-book-theme="minimal"] .book-chapter-title{ font-family:'Inter',sans-serif; font-weight:800; letter-spacing:-0.01em; }
+  [data-book-theme="minimal"] .book-cover-title{ font-family:'Inter',sans-serif; font-weight:900; }
 </style>
 </head>
 <body>
@@ -615,7 +650,8 @@ function buildPayload(){
     prefs: state.prefs,
     temperatures: state.temperatures,
     healthRecords: state.healthRecords,
-    activeSleep: state.activeSleep
+    activeSleep: state.activeSleep,
+    photoBooks: state.photoBooks
   };
 }
 async function firestoreGet(){
@@ -650,6 +686,7 @@ function applyRemote(remote){
   state.temperatures = remote.temperatures || [];
   state.healthRecords = remote.healthRecords || [];
   state.activeSleep = remote.activeSleep || null;
+  state.photoBooks = remote.photoBooks || [];
   if(state.activeSleep) startSleepTicker(); else stopSleepTicker();
 }
 function safeRerender(){
@@ -748,7 +785,8 @@ let state = {
   prefs: {},
   temperatures: [],
   healthRecords: [],
-  activeSleep: null
+  activeSleep: null,
+  photoBooks: []
 };
 let currentView = 'home';
 let currentGrowthTab = 'weight';
@@ -1383,7 +1421,7 @@ function render(){
       <button data-view="health" class="${currentView==='health'?'active':''}">${icon('health')}Health</button>
       <button data-view="milestones" class="${currentView==='milestones'?'active':''}">${icon('star')}Moments</button>
     </nav>
-    <button class="fab" id="fabAdd" aria-label="Quick log">${icon('plus',20)}Log</button>
+    <button class="fab" id="fabAdd" aria-label="Quick log">${icon('plus',20)}${currentView==='milestones'?'Moment':'Log'}</button>
     <div class="sheet-overlay" id="sheetOverlay">
       <div class="sheet" id="sheetPanel"></div>
     </div>
@@ -1393,7 +1431,7 @@ function render(){
   document.querySelectorAll('nav.bottom button[data-view]').forEach(b=>{
     b.addEventListener('click', ()=>{ sheetOpen=false; currentView=b.dataset.view; render(); });
   });
-  document.getElementById('fabAdd').addEventListener('click', ()=> openSheet('menu'));
+  document.getElementById('fabAdd').addEventListener('click', ()=> openSheet(currentView==='milestones' ? 'moment' : 'menu'));
   const setb = document.getElementById('settingsBtn');
   if(setb) setb.addEventListener('click', ()=>{ currentView='settings'; render(); });
   document.getElementById('sheetOverlay').addEventListener('click', (e)=>{ if(e.target.id==='sheetOverlay') closeSheet(); });
@@ -1413,6 +1451,9 @@ function renderMain(){
   else if(currentView==='settings') { main.innerHTML = renderSettings(); bindSettings(); }
   else if(currentView==='brief') { main.innerHTML = renderDailyBrief(); bindDailyBrief(); }
   else if(currentView==='recap') { main.innerHTML = renderMonthlyRecap(); bindMonthlyRecap(); }
+  else if(currentView==='photobook') { main.innerHTML = renderPhotoBookList(); bindPhotoBookList(); }
+  else if(currentView==='photobookeditor') { main.innerHTML = renderPhotoBookEditor(); bindPhotoBookEditor(); }
+  else if(currentView==='photobookpreview') { main.innerHTML = renderPhotoBookPreview(); bindPhotoBookPreview(); }
   else if(currentView==='ask') { main.innerHTML = renderAskView(); bindAskView(); }
   if(sheetOpen) renderSheet();
 }
@@ -1425,27 +1466,45 @@ let growthExplainOpen = false;
 let showWhoCurves = false;
 let sheetDraft = {};
 let editingKind = null, editingId = null, editingItem = null;
+let qlMomentPhotos = [], qlMomentPrimaryId = null, qlMomentFavourite = false, qlMomentPeople = [];
 let editingActiveSleepStart = false;
 let viewingMomentId = null;
+let viewingMomentPhotoIdx = 0;
 function renderMomentViewer(){
   if(!viewingMomentId) return '';
-  const m = state.milestones.find(x=>x.id===viewingMomentId);
-  if(!m) return '';
+  const raw = state.milestones.find(x=>x.id===viewingMomentId);
+  if(!raw) return '';
+  const m = normalizeMoment(raw);
+  const photos = m.photos;
+  const idx = Math.min(viewingMomentPhotoIdx, Math.max(0, photos.length-1));
+  const p = photos[idx];
+  const tags = (m.people||[]).concat(m.milestoneTag?[m.milestoneTag]:[]);
   return `
     <button class="moment-viewer-close" id="momentViewerClose" aria-label="Close">✕</button>
     <button class="moment-viewer-menu" id="momentViewerMenu" aria-label="Moment options">⋯</button>
+    ${m.favourite ? `<div style="position:absolute;top:calc(14px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:2;font-size:18px;">⭐</div>` : ''}
     <div class="moment-viewer-img-wrap">
-      ${m.photo ? `<img src="${m.photo}" alt="">` : `<div style="font-size:64px;">⭐</div>`}
+      ${p ? `<img src="${p.full||p.thumb}" alt="" style="object-position:center ${p.focalY!=null?p.focalY:50}%;">` : `<div style="font-size:64px;">${m.kind==='letter'?'💌':'⭐'}</div>`}
+      ${photos.length>1 ? `
+        <button class="moment-viewer-navbtn" id="momentPhotoPrev" style="left:8px;" aria-label="Previous photo">‹</button>
+        <button class="moment-viewer-navbtn" id="momentPhotoNext" style="right:8px;" aria-label="Next photo">›</button>
+        <div style="position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;gap:5px;">
+          ${photos.map((ph,i)=>`<span style="width:6px;height:6px;border-radius:50%;background:${i===idx?'#fff':'rgba(255,255,255,0.4)'};"></span>`).join('')}
+        </div>
+      ` : ''}
     </div>
     <div class="moment-viewer-info">
       <div style="font-family:'Baloo 2',cursive;font-size:20px;font-weight:700;">${escapeHtml(m.title)}</div>
-      <div style="font-size:12.5px;opacity:0.75;margin-top:4px;">${fmtDateFull(m.date)} · ${momentAgeLabel(m.date)}</div>
+      <div style="font-size:12.5px;opacity:0.75;margin-top:4px;">${fmtDateFull(m.date)} · ${momentAgeLabel(m.date)}${m.location?' · '+escapeHtml(m.location):''}</div>
+      ${tags.length ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">${tags.map(t=>`<span style="font-size:10.5px;font-weight:700;background:rgba(255,255,255,0.15);padding:3px 9px;border-radius:99px;">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
       ${m.note ? `<div style="font-size:13px;opacity:0.9;margin-top:10px;line-height:1.5;">${escapeHtml(m.note)}</div>` : ''}
+      ${photos.some(isLowResPhoto) ? `<div style="font-size:10.5px;opacity:0.55;margin-top:8px;">Lower-resolution image</div>` : ''}
     </div>
   `;
 }
 function openMomentViewer(id){
   viewingMomentId = id;
+  viewingMomentPhotoIdx = 0;
   const overlay = document.getElementById('momentViewerOverlay');
   if(!overlay) return;
   overlay.classList.add('open');
@@ -1463,6 +1522,26 @@ function bindMomentViewer(){
   if(close) close.addEventListener('click', closeMomentViewer);
   const menu = document.getElementById('momentViewerMenu');
   if(menu) menu.addEventListener('click', ()=>{ closeMomentViewer(); openEntryActions('milestone', id); });
+  const prev = document.getElementById('momentPhotoPrev');
+  if(prev) prev.addEventListener('click', ()=>{ viewingMomentPhotoIdx = Math.max(0, viewingMomentPhotoIdx-1); const o=document.getElementById('momentViewerOverlay'); o.innerHTML=renderMomentViewer(); bindMomentViewer(); });
+  const next = document.getElementById('momentPhotoNext');
+  if(next) next.addEventListener('click', ()=>{
+    const raw = state.milestones.find(x=>x.id===id); const m = raw?normalizeMoment(raw):null;
+    const max = m ? m.photos.length-1 : 0;
+    viewingMomentPhotoIdx = Math.min(max, viewingMomentPhotoIdx+1);
+    const o=document.getElementById('momentViewerOverlay'); o.innerHTML=renderMomentViewer(); bindMomentViewer();
+  });
+  let touchX = null;
+  const wrap = document.querySelector('.moment-viewer-img-wrap');
+  if(wrap){
+    wrap.addEventListener('touchstart', e=>{ touchX = e.touches[0].clientX; }, {passive:true});
+    wrap.addEventListener('touchend', e=>{
+      if(touchX==null) return;
+      const dx = e.changedTouches[0].clientX - touchX;
+      if(Math.abs(dx)>40){ if(dx<0 && next) next.click(); else if(dx>0 && prev) prev.click(); }
+      touchX = null;
+    }, {passive:true});
+  }
 }
 let entryActionKind = null, entryActionId = null;
 const STEP_TO_KIND = { nappy:'nappy', feed:'feed', sleep:'sleep', temp:'temperature', weight:'measurement', moment:'milestone', healthnote:'healthRecord' };
@@ -1563,8 +1642,15 @@ function startEditEntry(kind, id){
   if(kind==='sleep'){ currentSleepType = item.label; }
   if(kind==='temperature'){ currentTempMethod = item.method; }
   if(kind==='healthRecord'){ currentHealthCat = item.category; }
+  if(kind==='milestone'){
+    const nm = normalizeMoment(item);
+    qlMomentPhotos = nm.photos.map(p=>({...p}));
+    qlMomentPrimaryId = nm.primaryPhotoId || (nm.photos[0] && nm.photos[0].id) || null;
+    qlMomentFavourite = !!item.favourite;
+    qlMomentPeople = (item.people||[]).slice();
+  }
   sheetOpen = true;
-  sheetStep = KIND_TO_STEP[kind];
+  sheetStep = (kind==='milestone' && item.kind==='letter') ? 'letter' : KIND_TO_STEP[kind];
   renderSheet();
 }
 function openDetailSheet(kind, id){
@@ -1593,6 +1679,7 @@ function goToStep(key){
   outlierWarning = null;
   editingActiveSleepStart = false;
   sheetShowTime=false; sheetShowDetails=false;
+  if(key==='moment'){ qlMomentPhotos=[]; qlMomentPrimaryId=null; qlMomentFavourite=false; qlMomentPeople=[]; }
   if(key==='pump'){ sheetStep='feed'; sheetPumpForced=true; }
   else { sheetStep=key; sheetPumpForced=false; }
   renderSheet();
@@ -1632,6 +1719,7 @@ function renderSheetContent(){
   if(sheetStep==='temp') return renderQuickLogTemp();
   if(sheetStep==='weight') return renderQuickLogWeight();
   if(sheetStep==='moment') return renderQuickLogMoment();
+  if(sheetStep==='letter') return renderQuickLogLetter();
   if(sheetStep==='healthnote') return renderQuickLogHealthNote();
   if(sheetStep==='entryActions') return renderEntryActions();
   if(sheetStep==='detail') return renderDetailSheet();
@@ -1642,10 +1730,14 @@ function renderEntryActions(){
   const m = DELETE_MAP[entryActionKind];
   const item = m ? state[m.arr].find(x=>x.id===entryActionId) : null;
   if(!item) return `<div class="sheet-title">Entry</div><div class="empty">This entry was removed.</div>`;
+  const isMoment = entryActionKind==='milestone' && (item.kind||'moment')==='moment';
   return `
     <div class="sheet-title">Entry options</div>
     <div class="menu-panel" style="flex-direction:column;align-items:stretch;">
       <button data-entryedit="1">Edit</button>
+      ${isMoment ? `<button data-momentpin="1">${item.pinned?'Unpin from top':'Pin as featured'}</button>` : ''}
+      ${isMoment ? `<button data-momentfav="1">${item.favourite?'Remove favourite':'Mark favourite ⭐'}</button>` : ''}
+      ${isMoment ? `<button data-momentbook="1">${item.includeInBook===false?'Include in photo book':'Exclude from photo book'}</button>` : ''}
       <button data-entrydelete="1" class="danger">Delete</button>
     </div>
   `;
@@ -1907,6 +1999,24 @@ function renderQuickLogWeight(){
     ${isEdit ? `<button class="ql-link" id="deleteMeasureBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
+const PEOPLE_TAG_OPTIONS = ['Mummy','Papa'];
+function renderMomentPhotoStrip(){
+  return `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 4px;">
+      ${qlMomentPhotos.map((p,i)=>`
+        <div style="position:relative;width:64px;height:64px;">
+          <img src="${p.thumb}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;${p.id===qlMomentPrimaryId?'outline:2px solid var(--lavender-deep);outline-offset:2px;':''}" data-momsetprimary="${p.id}">
+          <button data-momremovephoto="${p.id}" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:rgba(0,0,0,0.6);color:#fff;border:none;font-size:10px;line-height:18px;padding:0;">✕</button>
+          ${i>0?`<button data-momphotoleft="${p.id}" style="position:absolute;bottom:-6px;left:-2px;width:16px;height:16px;border-radius:50%;background:var(--surface-muted);border:none;font-size:9px;padding:0;">‹</button>`:''}
+          ${i<qlMomentPhotos.length-1?`<button data-momphotoright="${p.id}" style="position:absolute;bottom:-6px;right:-2px;width:16px;height:16px;border-radius:50%;background:var(--surface-muted);border:none;font-size:9px;padding:0;">›</button>`:''}
+        </div>
+      `).join('')}
+      <label for="qlMomentPhotoAdd" style="width:64px;height:64px;border-radius:8px;border:1.5px dashed var(--line);display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--ink-tertiary);cursor:pointer;">+</label>
+      <input type="file" accept="image/*" id="qlMomentPhotoAdd" style="display:none;" multiple>
+    </div>
+    ${qlMomentPhotos.length>1 ? `<div class="meta-text">Tap a photo to make it the cover. Use ‹ › to reorder.</div>` : ''}
+  `;
+}
 function renderQuickLogMoment(){
   const isEdit = editingKind==='milestone';
   return `
@@ -1915,11 +2025,31 @@ function renderQuickLogMoment(){
     <input type="text" id="qlMomentTitle" placeholder="e.g. First smile" value="${escapeHtml(fVal('qlMomentTitle', isEdit?editingItem.title:''))}" autofocus>
     ${nowTimeRow('qlMomentDate', true, isEdit?editingItem.date:null)}
     ${sheetShowDetails ? `
-      <label>Photo (optional)</label><input type="file" accept="image/*" id="qlMomentPhoto">
-      ${isEdit && editingItem.photo ? `<div class="meta-text">A photo is already attached — choosing a new one will replace it.</div>` : ''}
-      <label>Note (optional)</label><textarea id="qlMomentNote" rows="2" placeholder="optional">${escapeHtml(fVal('qlMomentNote', isEdit?editingItem.note:''))}</textarea>
-    ` : `<button class="ql-link" id="qlMomentAddDetails">Add photo &amp; note</button>`}
-    <button class="btn" id="qlSaveMoment">${isEdit?'Save changes':'Save moment'}</button>
+      <label>Photos (optional)</label>
+      ${renderMomentPhotoStrip()}
+      <label>Story / note (optional)</label><textarea id="qlMomentNote" rows="3" placeholder="optional">${escapeHtml(fVal('qlMomentNote', isEdit?editingItem.note:''))}</textarea>
+      <label>Tag people</label>
+      <div class="seg" id="qlMomentPeopleSeg">
+        ${PEOPLE_TAG_OPTIONS.map(p=>`<button data-momperson="${p}" class="${qlMomentPeople.includes(p)?'active':''}" type="button">${p}</button>`).join('')}
+      </div>
+      <label>First / milestone (optional)</label><input type="text" id="qlMomentTag" placeholder="e.g. First smile" value="${escapeHtml(fVal('qlMomentTag', isEdit?(editingItem.milestoneTag||''):''))}">
+      <label>Location (optional)</label><input type="text" id="qlMomentLocation" placeholder="optional" value="${escapeHtml(fVal('qlMomentLocation', isEdit?(editingItem.location||''):''))}">
+      <button class="ql-link" id="qlMomentFavToggle" type="button" style="padding:8px 0 0;">${qlMomentFavourite?'⭐ Favourite — tap to remove':'☆ Mark as favourite'}</button>
+    ` : `<button class="ql-link" id="qlMomentAddDetails">Add photos &amp; details</button>`}
+    <button class="btn" id="qlSaveMoment" style="margin-top:12px;">${isEdit?'Save changes':'Save moment'}</button>
+    ${isEdit ? `<button class="ql-link" id="deleteMomentBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
+  `;
+}
+function renderQuickLogLetter(){
+  const isEdit = editingKind==='milestone';
+  const parent = getCurrentParentProfile();
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>${isEdit?'Edit letter':'Letter to '+escapeHtml(state.profile.name)}</div>
+    ${nowTimeRow('qlLetterDate', false, isEdit?editingItem.date:null)}
+    <label>Your letter</label>
+    <textarea id="qlLetterText" rows="8" placeholder="Write whatever you'd want her to read one day...">${escapeHtml(fVal('qlLetterText', isEdit?editingItem.note:''))}</textarea>
+    <div class="meta-text">This will be saved from ${escapeHtml((isEdit?editingItem.author:parent.role)||'you')}.</div>
+    <button class="btn" id="qlSaveLetter" style="margin-top:12px;">${isEdit?'Save changes':'Save letter'}</button>
     ${isEdit ? `<button class="ql-link" id="deleteMomentBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
@@ -2162,25 +2292,94 @@ function bindSheet(){
 
   const qlMomentAddDetails = document.getElementById('qlMomentAddDetails');
   if(qlMomentAddDetails) qlMomentAddDetails.addEventListener('click', ()=>{ captureSheetDraft(); sheetShowDetails=true; renderSheet(); });
+  const momentPhotoAdd = document.getElementById('qlMomentPhotoAdd');
+  if(momentPhotoAdd) momentPhotoAdd.addEventListener('change', async ()=>{
+    const files = Array.from(momentPhotoAdd.files||[]);
+    if(!files.length) return;
+    captureSheetDraft();
+    toast('Processing photo' + (files.length>1?'s…':'…'));
+    for(const f of files){
+      try{
+        const p = await processMomentPhotoFile(f);
+        qlMomentPhotos.push(p);
+        if(!qlMomentPrimaryId) qlMomentPrimaryId = p.id;
+      }catch(e){ console.error('photo processing failed', e); }
+    }
+    renderSheet();
+  });
+  document.querySelectorAll('[data-momsetprimary]').forEach(el=>{
+    el.addEventListener('click', ()=>{ captureSheetDraft(); qlMomentPrimaryId = el.dataset.momsetprimary; renderSheet(); });
+  });
+  document.querySelectorAll('[data-momremovephoto]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      captureSheetDraft();
+      const id = el.dataset.momremovephoto;
+      qlMomentPhotos = qlMomentPhotos.filter(p=>p.id!==id);
+      if(qlMomentPrimaryId===id) qlMomentPrimaryId = qlMomentPhotos[0] ? qlMomentPhotos[0].id : null;
+      renderSheet();
+    });
+  });
+  document.querySelectorAll('[data-momphotoleft]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      captureSheetDraft();
+      const i = qlMomentPhotos.findIndex(p=>p.id===el.dataset.momphotoleft);
+      if(i>0){ const [p]=qlMomentPhotos.splice(i,1); qlMomentPhotos.splice(i-1,0,p); }
+      renderSheet();
+    });
+  });
+  document.querySelectorAll('[data-momphotoright]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      captureSheetDraft();
+      const i = qlMomentPhotos.findIndex(p=>p.id===el.dataset.momphotoright);
+      if(i>=0 && i<qlMomentPhotos.length-1){ const [p]=qlMomentPhotos.splice(i,1); qlMomentPhotos.splice(i+1,0,p); }
+      renderSheet();
+    });
+  });
+  document.querySelectorAll('[data-momperson]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      captureSheetDraft();
+      const p = el.dataset.momperson;
+      qlMomentPeople = qlMomentPeople.includes(p) ? qlMomentPeople.filter(x=>x!==p) : qlMomentPeople.concat(p);
+      renderSheet();
+    });
+  });
+  const momentFavToggle = document.getElementById('qlMomentFavToggle');
+  if(momentFavToggle) momentFavToggle.addEventListener('click', ()=>{ captureSheetDraft(); qlMomentFavourite=!qlMomentFavourite; renderSheet(); });
   const saveMomentBtn = document.getElementById('qlSaveMoment');
   if(saveMomentBtn) saveMomentBtn.addEventListener('click', async ()=>{
     const title = document.getElementById('qlMomentTitle').value.trim();
     const date = document.getElementById('qlMomentDate').value;
     if(!title){ toast('Enter what happened'); return; }
-    let photo = (editingKind==='milestone' && editingItem) ? editingItem.photo : null;
-    let note = document.getElementById('qlMomentNote') ? document.getElementById('qlMomentNote').value.trim() : '';
-    const fileInput = document.getElementById('qlMomentPhoto');
-    if(fileInput && fileInput.files && fileInput.files[0]){
-      try{ photo = await readAndCompressImage(fileInput.files[0], 640, 0.6); }
-      catch(e){ console.error(e); }
-    }
+    const note = document.getElementById('qlMomentNote') ? document.getElementById('qlMomentNote').value.trim() : '';
+    const milestoneTag = document.getElementById('qlMomentTag') ? document.getElementById('qlMomentTag').value.trim() : '';
+    const location = document.getElementById('qlMomentLocation') ? document.getElementById('qlMomentLocation').value.trim() : '';
+    const patch = {
+      title, date:new Date(date).toISOString(), note, kind:'moment',
+      photos: qlMomentPhotos, primaryPhotoId: qlMomentPrimaryId,
+      favourite: qlMomentFavourite, people: qlMomentPeople, milestoneTag, location
+    };
     if(editingKind==='milestone' && editingId){
-      updateEntry('milestone', editingId, {title, date:new Date(date).toISOString(), note, photo});
+      updateEntry('milestone', editingId, patch);
     } else {
-      state.milestones.push({id:uid(), title, date:new Date(date).toISOString(), note, photo});
+      state.milestones.push({id:uid(), includeInBook:true, ...patch});
     }
     await saveKey('milestones', state.milestones);
     await flashButtonSuccess('qlSaveMoment', '✓ Saved'); closeSheet(); renderMain();
+  });
+  const saveLetterBtn = document.getElementById('qlSaveLetter');
+  if(saveLetterBtn) saveLetterBtn.addEventListener('click', async ()=>{
+    const date = document.getElementById('qlLetterDate').value;
+    const text = document.getElementById('qlLetterText').value.trim();
+    if(!text){ toast('Write your letter first'); return; }
+    const parent = getCurrentParentProfile();
+    const author = (editingKind==='milestone' && editingItem) ? editingItem.author : (parent.role||'A parent');
+    if(editingKind==='milestone' && editingId){
+      updateEntry('milestone', editingId, {date:new Date(date).toISOString(), note:text, author});
+    } else {
+      state.milestones.push({id:uid(), kind:'letter', title:`A letter from ${author}`, date:new Date(date).toISOString(), note:text, author, includeInBook:true, photos:[]});
+    }
+    await saveKey('milestones', state.milestones);
+    await flashButtonSuccess('qlSaveLetter', '✓ Saved'); closeSheet(); renderMain();
   });
   const delMoment = document.getElementById('deleteMomentBtn');
   if(delMoment) delMoment.addEventListener('click', ()=> deleteEntryWithUndo('milestone', editingId));
@@ -2207,6 +2406,32 @@ function bindSheet(){
   if(entryEditBtn) entryEditBtn.addEventListener('click', ()=> startEditEntry(entryActionKind, entryActionId));
   const entryDeleteBtn = document.querySelector('[data-entrydelete]');
   if(entryDeleteBtn) entryDeleteBtn.addEventListener('click', ()=> deleteEntryWithUndo(entryActionKind, entryActionId));
+  const momentFavBtn = document.querySelector('[data-momentfav]');
+  if(momentFavBtn) momentFavBtn.addEventListener('click', async ()=>{
+    const item = state.milestones.find(x=>x.id===entryActionId);
+    if(!item) return;
+    updateEntry('milestone', entryActionId, {favourite: !item.favourite});
+    await saveKey('milestones', state.milestones);
+    closeSheet(); renderMain();
+  });
+  const momentBookBtn = document.querySelector('[data-momentbook]');
+  if(momentBookBtn) momentBookBtn.addEventListener('click', async ()=>{
+    const item = state.milestones.find(x=>x.id===entryActionId);
+    if(!item) return;
+    updateEntry('milestone', entryActionId, {includeInBook: item.includeInBook===false ? true : false});
+    await saveKey('milestones', state.milestones);
+    closeSheet(); renderMain();
+  });
+  const momentPinBtn = document.querySelector('[data-momentpin]');
+  if(momentPinBtn) momentPinBtn.addEventListener('click', async ()=>{
+    const item = state.milestones.find(x=>x.id===entryActionId);
+    if(!item) return;
+    const nowPinned = !item.pinned;
+    if(nowPinned) state.milestones.forEach(x=>{ if(x.id!==entryActionId) x.pinned=false; });
+    updateEntry('milestone', entryActionId, {pinned: nowPinned});
+    await saveKey('milestones', state.milestones);
+    closeSheet(); renderMain();
+  });
 
   const detailEditBtn = document.querySelector('[data-detailedit]');
   if(detailEditBtn) detailEditBtn.addEventListener('click', ()=> startEditEntry(sheetDetailKind, sheetDetailId));
@@ -2700,13 +2925,13 @@ function bindAdd(){
       const date = document.getElementById('momDate').value;
       const note = document.getElementById('momNote').value.trim();
       if(!title || !date){ toast('Enter a title and date'); return; }
-      let photo = null;
+      let photos = [];
       const fileInput = document.getElementById('momPhoto');
       if(fileInput.files && fileInput.files[0]){
-        try{ photo = await readAndCompressImage(fileInput.files[0], 640, 0.6); }
+        try{ photos = [await processMomentPhotoFile(fileInput.files[0])]; }
         catch(e){ console.error('photo processing failed', e); toast('Could not process photo — saved without it'); }
       }
-      state.milestones.push({id:uid(), title, date:new Date(date).toISOString(), note, photo});
+      state.milestones.push({id:uid(), kind:'moment', title, date:new Date(date).toISOString(), note, photos, primaryPhotoId: photos[0]?photos[0].id:null, includeInBook:true});
       await saveKey('milestones', state.milestones);
       toast('Moment saved ⭐'); currentView='home'; render();
     });
@@ -5887,55 +6112,414 @@ function momentAgeLabel(dateISO){
   return a.weeks<12 ? `${a.weeks}w ${a.remDays}d old` : `${a.months} mo old`;
 }
 function momentMonthLabel(n){ return n===0 ? 'Newborn' : n===1 ? '1 month' : `${n} months`; }
+function momentChapterKey(dateISO){
+  const a = ageAtDate(state.profile.birthDate, dateISO);
+  if(a.weeks<=1) return 'birth';
+  if(a.months===0) return 'newborn';
+  return 'm'+a.months;
+}
+function momentChapterLabel(key){
+  if(key==='birth') return 'Birth & first days';
+  if(key==='newborn') return 'Newborn';
+  const n = parseInt(key.slice(1),10);
+  return n===1 ? '1 month' : `${n} months`;
+}
+/* Canonical moment shape — old single-photo records (just `photo`) are
+   normalized on read into the same `photos[]` array shape new records use,
+   so nothing has to special-case legacy data. */
+function normalizeMoment(m){
+  if(m.photos) return m;
+  const photos = m.photo ? [{ id:m.id+'-p0', thumb:m.photo, full:m.photo, focalY:50, legacy:true }] : [];
+  return { ...m, photos, kind: m.kind||'moment' };
+}
+/* New photos get both a small thumbnail (grid/list use) and a larger display
+   image (full-screen + photo book). This roughly doubles storage per photo
+   versus the old single-640px approach — a deliberate quality trade-off for
+   print/full-screen use, still base64-in-Firestore. True print resolution at
+   scale needs Firebase Storage instead of inline documents; that's a bigger
+   infrastructure change this pass doesn't attempt. */
+async function processMomentPhotoFile(file){
+  const [thumb, full] = await Promise.all([
+    readAndCompressImage(file, 480, 0.62),
+    readAndCompressImage(file, 1280, 0.74)
+  ]);
+  return { id: uid(), thumb, full, focalY:50 };
+}
+function momentCoverPhoto(m){
+  const nm = normalizeMoment(m);
+  if(!nm.photos.length) return null;
+  return nm.photos.find(p=>p.id===nm.primaryPhotoId) || nm.photos[0];
+}
+function isLowResPhoto(p){ return !!p.legacy; }
 
-function renderMilestones(){
-  const list = state.milestones.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
-  const featured = list[0];
-  const rest = list.slice(1);
-  const groups = {};
-  const order = [];
-  rest.forEach(m=>{
-    const bucket = ageAtDate(state.profile.birthDate, m.date).months;
-    if(!groups[bucket]){ groups[bucket]=[]; order.push(bucket); }
-    groups[bucket].push(m);
+/* ================= Photo Book ================= */
+function newPhotoBookDraft(rangeKind){
+  const now = new Date();
+  const birth = state.profile.birthDate;
+  let start, end, subtitle;
+  if(rangeKind==='firstMonth'){ start=birth; end=new Date(new Date(birth).getTime()+31*86400000).toISOString(); subtitle='Her First Month'; }
+  else if(rangeKind==='firstYear'){ start=birth; end=new Date(new Date(birth).getTime()+366*86400000).toISOString(); subtitle='Her First Year'; }
+  else { start=birth; end=now.toISOString(); subtitle='A Memory Book'; }
+  return {
+    id: uid(), title: state.profile.name, subtitle,
+    range: { kind: rangeKind, start, end },
+    theme: 'classic', coverMomentId: null,
+    excludedIds: [], captions: {},
+    createdAt: now.toISOString(), updatedAt: now.toISOString()
+  };
+}
+function photoBookEligibleMoments(book){
+  const startMs = new Date(book.range.start).getTime(), endMs = new Date(book.range.end).getTime();
+  return state.milestones.filter(m=>{
+    const t = new Date(m.date).getTime();
+    if(t<startMs || t>endMs) return false;
+    if(book.excludedIds.includes(m.id)) return false;
+    if(m.kind==='letter') return true;
+    return m.includeInBook!==false;
+  }).sort((a,b)=>new Date(a.date)-new Date(b.date));
+}
+function weightNearAge(months){
+  const list = state.measurements.filter(m=>m.type==='weight')
+    .sort((a,b)=>Math.abs(ageMonthsDecimal(state.profile.birthDate,a.date)-months) - Math.abs(ageMonthsDecimal(state.profile.birthDate,b.date)-months));
+  return list[0]||null;
+}
+let currentPhotoBookId = null;
+function renderPhotoBookList(){
+  const books = state.photoBooks.slice().sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
+  return `
+    <div class="hero">
+      <button id="pbBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Moments</button>
+      <h1>Photo Books</h1><p>Turn her moments into a keepsake.</p>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
+      <button class="btn secondary" data-pbcreate="firstMonth" style="flex:1;min-width:100px;">First Month</button>
+      <button class="btn secondary" data-pbcreate="firstYear" style="flex:1;min-width:100px;">First Year</button>
+      <button class="btn secondary" data-pbcreate="custom" style="flex:1;min-width:100px;">Custom</button>
+    </div>
+    ${books.length ? books.map(b=>`
+      <div class="row-item" data-pbopen="${b.id}" style="cursor:pointer;">
+        <div class="main" style="font-weight:600;">${escapeHtml(b.title)} — ${escapeHtml(b.subtitle)}</div>
+        <div class="meta-text">${fmtDate(b.range.start)} – ${fmtDate(b.range.end)} →</div>
+      </div>`).join('') : `<div class="empty">No photo books yet.<br>Choose a range above to start one.</div>`}
+  `;
+}
+function renderPhotoBookMomentRow(book, m){
+  const included = !book.excludedIds.includes(m.id);
+  const nm = normalizeMoment(m);
+  const cover = momentCoverPhoto(m);
+  const lowRes = nm.photos.some(isLowResPhoto);
+  return `
+    <div class="row-item" style="align-items:center;">
+      <div style="display:flex;gap:10px;flex:1;align-items:center;">
+        ${m.kind==='letter' ? `<div style="width:40px;height:40px;border-radius:6px;background:var(--surface-muted);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">💌</div>` : cover ? `<img src="${cover.thumb}" style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0;">` : `<div style="width:40px;height:40px;border-radius:6px;background:var(--surface-muted);flex-shrink:0;"></div>`}
+        <div>
+          <div class="main" style="font-weight:600;">${escapeHtml(m.title||('From '+(m.author||'')))}</div>
+          <div class="meta-text">${fmtDate(m.date)}${nm.photos.length>1?` · ${nm.photos.length} photos`:''}${lowRes?' · lower-res':''}</div>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;flex-shrink:0;">
+        <input type="checkbox" data-pbinclude="${m.id}" ${included?'checked':''}> Include
+      </label>
+    </div>`;
+}
+function renderPhotoBookEditor(){
+  const book = state.photoBooks.find(b=>b.id===currentPhotoBookId);
+  if(!book) return `<div class="empty">This book was removed.</div>`;
+  const allInRange = state.milestones.filter(m=>{ const t=new Date(m.date).getTime(); return t>=new Date(book.range.start).getTime() && t<=new Date(book.range.end).getTime(); }).sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const eligible = photoBookEligibleMoments(book);
+  const lowResCount = eligible.reduce((s,m)=> s+normalizeMoment(m).photos.filter(isLowResPhoto).length, 0);
+  return `
+    <div class="hero"><button id="pbEditorBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Photo Books</button><h1>${escapeHtml(book.title)}</h1></div>
+    <div class="card">
+      <label>Book title</label><input type="text" id="pbTitle" value="${escapeHtml(book.title)}">
+      <label>Subtitle</label><input type="text" id="pbSubtitle" value="${escapeHtml(book.subtitle)}">
+      <label>Style</label>
+      <div class="seg" id="pbThemeSeg">
+        ${['classic','soft','minimal'].map(t=>`<button data-pbtheme="${t}" class="${book.theme===t?'active':''}" type="button">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}
+      </div>
+      ${eligible.length ? `<label>Cover photo</label><select id="pbCoverSelect">${eligible.filter(m=>m.kind!=='letter'&&momentCoverPhoto(m)).map(m=>`<option value="${m.id}" ${book.coverMomentId===m.id?'selected':''}>${escapeHtml(m.title)} · ${fmtDate(m.date)}</option>`).join('')}</select>` : ''}
+    </div>
+    ${lowResCount ? `<div class="note" style="margin:-6px 2px 14px;">${lowResCount} photo${lowResCount===1?' is':'s are'} lower-resolution — fine on-screen, may look soft printed.</div>` : ''}
+    <div class="section-header">Moments in this book (${eligible.length} of ${allInRange.length})</div>
+    ${allInRange.length ? allInRange.map(m=>renderPhotoBookMomentRow(book,m)).join('') : `<div class="empty">No moments logged in this range yet.</div>`}
+    <button class="btn" id="pbPreviewBtn" style="margin-top:16px;">Preview book →</button>
+  `;
+}
+function bindPhotoBookEditor(){
+  const back = document.getElementById('pbEditorBack');
+  if(back) back.addEventListener('click', ()=>{ currentView='photobook'; render(); });
+  const savePatch = async (patch)=>{
+    const idx = state.photoBooks.findIndex(b=>b.id===currentPhotoBookId);
+    if(idx===-1) return;
+    state.photoBooks[idx] = {...state.photoBooks[idx], ...patch, updatedAt:new Date().toISOString()};
+    await saveKey('photoBooks', state.photoBooks);
+  };
+  const titleInput = document.getElementById('pbTitle');
+  if(titleInput) titleInput.addEventListener('change', ()=> savePatch({title:titleInput.value.trim()||state.profile.name}));
+  const subInput = document.getElementById('pbSubtitle');
+  if(subInput) subInput.addEventListener('change', ()=> savePatch({subtitle:subInput.value.trim()}));
+  document.querySelectorAll('[data-pbtheme]').forEach(b=>{
+    b.addEventListener('click', async ()=>{ await savePatch({theme:b.dataset.pbtheme}); renderMain(); });
   });
+  const coverSelect = document.getElementById('pbCoverSelect');
+  if(coverSelect) coverSelect.addEventListener('change', ()=> savePatch({coverMomentId:coverSelect.value}));
+  document.querySelectorAll('[data-pbinclude]').forEach(cb=>{
+    cb.addEventListener('change', async ()=>{
+      const book = state.photoBooks.find(b=>b.id===currentPhotoBookId);
+      if(!book) return;
+      const id = cb.dataset.pbinclude;
+      const excluded = new Set(book.excludedIds);
+      if(cb.checked) excluded.delete(id); else excluded.add(id);
+      await savePatch({excludedIds:[...excluded]});
+    });
+  });
+  const previewBtn = document.getElementById('pbPreviewBtn');
+  if(previewBtn) previewBtn.addEventListener('click', ()=>{ currentView='photobookpreview'; render(); });
+}
+function bindPhotoBookList(){
+  const back = document.getElementById('pbBack');
+  if(back) back.addEventListener('click', ()=>{ currentView='milestones'; render(); });
+  document.querySelectorAll('[data-pbcreate]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const draft = newPhotoBookDraft(b.dataset.pbcreate);
+      state.photoBooks.push(draft);
+      await saveKey('photoBooks', state.photoBooks);
+      currentPhotoBookId = draft.id;
+      currentView='photobookeditor'; render();
+    });
+  });
+  document.querySelectorAll('[data-pbopen]').forEach(b=>{
+    b.addEventListener('click', ()=>{ currentPhotoBookId=b.dataset.pbopen; currentView='photobookeditor'; render(); });
+  });
+}
+/* Book pages are plain HTML styled for print — "Export PDF" uses the
+   browser's native print-to-PDF, the same honest approach already used for
+   the health summary export, rather than pretending to generate a PDF
+   client-side without a real print engine. */
+function renderPhotoBookPages(book){
+  const eligible = photoBookEligibleMoments(book);
+  const groups = {}; const order = [];
+  eligible.forEach(m=>{ const k=momentChapterKey(m.date); if(!groups[k]){groups[k]=[];order.push(k);} groups[k].push(m); });
+  const coverMoment = book.coverMomentId ? state.milestones.find(x=>x.id===book.coverMomentId) : eligible.find(m=>m.kind!=='letter');
+  const coverPhoto = coverMoment ? momentCoverPhoto(coverMoment) : null;
+
+  let html = `
+    <div class="book-page book-cover-page">
+      ${coverPhoto ? `<img src="${coverPhoto.full||coverPhoto.thumb}" class="book-cover-img" style="object-position:center ${coverPhoto.focalY!=null?coverPhoto.focalY:50}%;">` : ''}
+      <div class="book-cover-text">
+        <div class="book-cover-title">${escapeHtml(book.title)}</div>
+        <div class="book-cover-subtitle">${escapeHtml(book.subtitle)}</div>
+        <div class="book-cover-dates">${fmtDate(book.range.start)} – ${fmtDate(book.range.end)}</div>
+      </div>
+    </div>`;
+
+  if(!eligible.length){
+    html += `<div class="book-page"><div class="book-chapter-title">No moments in this range yet</div></div>`;
+    return html;
+  }
+
+  order.forEach(key=>{
+    html += `<div class="book-page book-chapter-page"><div class="book-chapter-title">${momentChapterLabel(key)}</div></div>`;
+    if(key.startsWith('m')){
+      const months = parseInt(key.slice(1),10);
+      const w = weightNearAge(months);
+      const favMoment = groups[key].find(m=>m.kind!=='letter' && m.favourite) || groups[key].find(m=>m.kind!=='letter');
+      if(w || favMoment){
+        html += `<div class="book-page book-summary-page">
+          <div class="book-summary-title">${momentChapterLabel(key)}</div>
+          ${w?`<div class="book-summary-line">Weight around this time · ${w.value} kg</div>`:''}
+          ${favMoment?`<div class="book-summary-line">Favourite memory · ${escapeHtml(favMoment.title)}</div>`:''}
+        </div>`;
+      }
+    }
+    groups[key].forEach(m=>{
+      if(m.kind==='letter'){
+        html += `<div class="book-page book-letter-page">
+          <div class="book-letter-heading">From ${escapeHtml(m.author||'a parent')} · ${momentAgeLabel(m.date)}</div>
+          <div class="book-letter-text">${escapeHtml(m.note||'').split(String.fromCharCode(10)).filter(Boolean).map(l=>`<p>${l}</p>`).join('')}</div>
+        </div>`;
+        return;
+      }
+      const nm = normalizeMoment(m);
+      const cap = book.captions[m.id] || m.note || '';
+      const big = m.favourite || m.pinned || nm.photos.length>1;
+      if(big){
+        html += `<div class="book-page book-moment-page-full">
+          <div class="book-photo-grid">${nm.photos.slice(0,4).map(p=>`<img src="${p.full||p.thumb}" class="book-photo" style="object-position:center ${p.focalY!=null?p.focalY:50}%;">`).join('')}</div>
+          <div class="book-moment-caption">
+            <div class="book-moment-title">${escapeHtml(m.title)}</div>
+            <div class="book-moment-meta">${fmtDate(m.date)} · ${momentAgeLabel(m.date)}</div>
+            ${cap?`<div class="book-moment-note">${escapeHtml(cap)}</div>`:''}
+          </div>
+        </div>`;
+      } else {
+        html += `<div class="book-page book-moment-page-small">
+          ${nm.photos[0]?`<img src="${nm.photos[0].full||nm.photos[0].thumb}" class="book-photo-small" style="object-position:center ${nm.photos[0].focalY!=null?nm.photos[0].focalY:50}%;">`:''}
+          <div class="book-moment-title-small">${escapeHtml(m.title)}</div>
+          <div class="book-moment-meta">${fmtDate(m.date)} · ${momentAgeLabel(m.date)}</div>
+          ${cap?`<div class="book-moment-note-small">${escapeHtml(cap)}</div>`:''}
+        </div>`;
+      }
+    });
+  });
+  return html;
+}
+function renderPhotoBookPreview(){
+  const book = state.photoBooks.find(b=>b.id===currentPhotoBookId);
+  if(!book) return `<div class="empty">This book was removed.</div>`;
+  return `
+    <div class="hero no-print"><button id="pbPreviewBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Edit book</button><h1>Preview</h1><p>Scroll to review, then export.</p></div>
+    <button class="btn no-print" id="pbExportBtn" style="margin-bottom:16px;">Export / Print PDF</button>
+    <div class="book-preview-scale" data-book-theme="${book.theme}">
+      ${renderPhotoBookPages(book)}
+    </div>
+  `;
+}
+function bindPhotoBookPreview(){
+  const back = document.getElementById('pbPreviewBack');
+  if(back) back.addEventListener('click', ()=>{ currentView='photobookeditor'; render(); });
+  const exportBtn = document.getElementById('pbExportBtn');
+  if(exportBtn) exportBtn.addEventListener('click', ()=> window.print());
+}
+
+let momentsSearchQuery = '';
+function computeMomentPrompts(){
+  const prompts = [];
+  const todayKey = sydDateKey();
+  const ageToday = ageAtDate(state.profile.birthDate, new Date().toISOString());
+  const bday = new Date(state.profile.birthDate);
+  const isMonthBirthday = ageToday.months>0 && bday.getDate()===new Date().getDate();
+  const todaysMoments = state.milestones.filter(m=> (m.kind||'moment')==='moment' && sydDateKey(m.date)===todayKey);
+  if(isMonthBirthday && !todaysMoments.length){
+    prompts.push({ text:`${escapeHtml(state.profile.name)} is ${ageToday.months} month${ageToday.months===1?'':'s'} old today`, cta:'Capture a moment' });
+  } else if(todaysMoments.length>=3){
+    prompts.push({ text:`${todaysMoments.length} moments were added today`, cta:'Add a note about today' });
+  }
+  return prompts.slice(0,1);
+}
+function renderMilestones(){
+  const all = state.milestones.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const q = momentsSearchQuery.trim().toLowerCase();
+  if(q){
+    const matches = all.filter(m=> (m.title||'').toLowerCase().includes(q) || (m.note||'').toLowerCase().includes(q) || (m.people||[]).some(p=>p.toLowerCase().includes(q)));
+    return `
+      <div class="hero" style="display:flex;align-items:baseline;justify-content:space-between;">
+        <div><h1>Moments</h1><p>A private journal of everything worth remembering.</p></div>
+      </div>
+      ${renderMomentsToolbar()}
+      <div class="section-header">${matches.length} result${matches.length===1?'':'s'}</div>
+      ${matches.length ? `<div class="gallery-grid">${matches.map(renderMomentGalleryCard).join('')}</div>` : `<div class="empty">No moments match "${escapeHtml(momentsSearchQuery)}".</div>`}
+    `;
+  }
+
+  const moments = all.filter(m=>(m.kind||'moment')==='moment');
+  const letters = all.filter(m=>m.kind==='letter');
+  const hero = moments.find(m=>m.pinned) || moments.find(m=>m.favourite) || moments[0] || null;
+  const rest = all.filter(m=>m.id!==(hero&&hero.id));
+
+  const groups = {}; const order = [];
+  rest.forEach(m=>{
+    const key = momentChapterKey(m.date);
+    if(!groups[key]){ groups[key]={photos:[], letters:[]}; order.push(key); }
+    if(m.kind==='letter') groups[key].letters.push(m); else groups[key].photos.push(m);
+  });
+
+  const prompts = computeMomentPrompts();
+
   return `
     <div class="hero" style="display:flex;align-items:baseline;justify-content:space-between;">
       <div><h1>Moments</h1><p>A private journal of everything worth remembering.</p></div>
     </div>
+    ${renderMomentsToolbar()}
+    ${prompts.map(p=>`
+      <div class="row-item" data-momentprompt="1" style="cursor:pointer;">
+        <div class="main" style="font-weight:600;">${p.text}</div>
+        <div class="meta-text" style="color:var(--lavender-deep);font-weight:700;">${p.cta} →</div>
+      </div>`).join('')}
+    ${(moments.length || letters.length) ? `<button class="ql-link" id="goPhotoBookLink" style="padding:10px 0 14px;">📖 Create photo book →</button>` : ''}
+
+    ${hero ? renderMomentHeroCard(hero) : `<div class="empty">No moments saved yet.<br>Capture your first memory 🌱</div>`}
+
+    ${order.map(key=>`
+      <div style="margin-bottom:6px;" id="chapter-${key}">
+        <div class="section-header" style="margin-top:16px;">${momentChapterLabel(key)}</div>
+        ${groups[key].letters.map(renderLetterCard).join('')}
+        ${groups[key].photos.length ? `<div class="gallery-grid">${groups[key].photos.map(renderMomentGalleryCard).join('')}</div>` : ''}
+      </div>`).join('')}
+  `;
+}
+function renderMomentsToolbar(){
+  const chapters = [...new Set(state.milestones.map(m=>momentChapterKey(m.date)))];
+  return `
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input type="text" id="momentSearchInput" placeholder="Search moments…" value="${escapeHtml(momentsSearchQuery)}" style="flex:1;">
+      ${chapters.length>1 ? `<select id="momentJumpSelect" style="width:auto;flex:0 0 auto;"><option value="">Jump to…</option>${chapters.map(k=>`<option value="${k}">${momentChapterLabel(k)}</option>`).join('')}</select>` : ''}
+    </div>
     <button class="ql-link" id="addMomentLink" style="padding:0 0 14px;">+ Add moment</button>
-    ${featured ? `
+    <button class="ql-link" id="addLetterLink" style="padding:0 0 14px;margin-left:14px;">💌 Write a letter</button>
+  `;
+}
+function renderMomentHeroCard(featured){
+  const cover = momentCoverPhoto(featured);
+  const extraCount = normalizeMoment(featured).photos.length - 1;
+  return `
     <div data-viewmoment="${featured.id}" style="position:relative;border-radius:var(--radius-major);overflow:hidden;margin-bottom:22px;background:var(--surface-muted);box-shadow:var(--shadow-2);cursor:pointer;">
-      ${featured.photo ? `<img src="${featured.photo}" style="width:100%;height:280px;object-fit:cover;display:block;">` : `<div style="width:100%;height:170px;display:flex;align-items:center;justify-content:center;font-size:46px;">⭐</div>`}
+      ${featured.pinned ? `<div style="position:absolute;top:12px;left:12px;z-index:2;font-size:11px;font-weight:800;color:#fff;background:rgba(0,0,0,0.4);padding:3px 9px;border-radius:99px;">📌 Featured</div>` : ''}
+      ${featured.favourite ? `<div style="position:absolute;top:12px;right:12px;z-index:2;font-size:18px;">⭐</div>` : ''}
+      ${cover ? `<img src="${cover.thumb}" style="width:100%;height:280px;object-fit:cover;object-position:center ${cover.focalY!=null?cover.focalY:50}%;display:block;">` : `<div style="width:100%;height:170px;display:flex;align-items:center;justify-content:center;font-size:46px;">⭐</div>`}
       <div style="padding:16px 18px 18px;">
         <div style="font-family:'Baloo 2',cursive;font-size:21px;font-weight:700;color:var(--ink);">${escapeHtml(featured.title)}</div>
-        <div class="meta-text" style="margin-top:4px;font-size:12px;">${fmtDateFull(featured.date)} · ${momentAgeLabel(featured.date)}</div>
+        <div class="meta-text" style="margin-top:4px;font-size:12px;">${fmtDateFull(featured.date)} · ${momentAgeLabel(featured.date)}${extraCount>0?` · +${extraCount} more photo${extraCount===1?'':'s'}`:''}</div>
         ${featured.note ? `<div class="support-text" style="margin-top:8px;">${escapeHtml(featured.note)}</div>` : ''}
       </div>
-    </div>` : `<div class="empty">No moments saved yet.<br>Capture your first memory 🌱</div>`}
-
-    ${order.length ? order.map(bucket=>`
-      <div style="margin-bottom:6px;">
-        <div class="section-header" style="margin-top:16px;">${momentMonthLabel(bucket)}</div>
-        <div class="gallery-grid">
-          ${groups[bucket].map(m=>`
-            <div class="gallery-card" data-viewmoment="${m.id}" style="cursor:pointer;">
-              ${m.photo ? `<img src="${m.photo}" alt="">` : `<div class="ph">⭐</div>`}
-              <div class="cap">
-                <div class="t">${escapeHtml(m.title)}</div>
-                <div class="s">${fmtDate(m.date)} · ${momentAgeLabel(m.date)}</div>
-              </div>
-            </div>`).join('')}
-        </div>
-      </div>`).join('') : ''}
-  `;
+    </div>`;
+}
+function renderMomentGalleryCard(m){
+  const cover = momentCoverPhoto(m);
+  const photoCount = normalizeMoment(m).photos.length;
+  return `
+    <div class="gallery-card" data-viewmoment="${m.id}" style="cursor:pointer;position:relative;">
+      ${m.favourite ? `<div style="position:absolute;top:6px;right:6px;z-index:2;font-size:13px;">⭐</div>` : ''}
+      ${photoCount>1 ? `<div style="position:absolute;top:6px;left:6px;z-index:2;font-size:9.5px;font-weight:800;color:#fff;background:rgba(0,0,0,0.4);padding:2px 6px;border-radius:99px;">${photoCount}</div>` : ''}
+      ${cover ? `<img src="${cover.thumb}" alt="" style="object-position:center ${cover.focalY!=null?cover.focalY:50}%;">` : `<div class="ph">⭐</div>`}
+      <div class="cap">
+        <div class="t">${escapeHtml(m.title)}</div>
+        <div class="s">${fmtDate(m.date)} · ${momentAgeLabel(m.date)}</div>
+      </div>
+    </div>`;
+}
+function renderLetterCard(m){
+  return `
+    <div class="card" data-viewmoment="${m.id}" style="cursor:pointer;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;">💌</span>
+        <div style="font-weight:800;font-size:13.5px;">From ${escapeHtml(m.author||'a parent')} · ${momentAgeLabel(m.date)}</div>
+      </div>
+      <div class="support-text" style="margin-top:6px;font-style:italic;">${escapeHtml((m.note||'').slice(0,140))}${(m.note||'').length>140?'…':''}</div>
+    </div>`;
 }
 function bindMilestones(){
   const addLink = document.getElementById('addMomentLink');
   if(addLink) addLink.addEventListener('click', ()=> openSheet('moment'));
+  const addLetterLink = document.getElementById('addLetterLink');
+  if(addLetterLink) addLetterLink.addEventListener('click', ()=> openSheet('letter'));
   document.querySelectorAll('[data-viewmoment]').forEach(el=>{
     el.addEventListener('click', ()=> openMomentViewer(el.dataset.viewmoment));
   });
+  const searchInput = document.getElementById('momentSearchInput');
+  if(searchInput){
+    searchInput.addEventListener('input', ()=>{ momentsSearchQuery = searchInput.value; renderMain(); });
+  }
+  const jumpSelect = document.getElementById('momentJumpSelect');
+  if(jumpSelect) jumpSelect.addEventListener('change', ()=>{
+    const el = document.getElementById('chapter-'+jumpSelect.value);
+    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+  });
+  document.querySelectorAll('[data-momentprompt]').forEach(el=>{
+    el.addEventListener('click', ()=> openSheet('moment'));
+  });
+  const gpbl = document.getElementById('goPhotoBookLink');
+  if(gpbl) gpbl.addEventListener('click', ()=>{ currentView='photobook'; render(); });
 }
 
 const DELETE_MAP = {
