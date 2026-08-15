@@ -612,6 +612,7 @@ function safeRerender(){
 /* Realtime sync: replaces the old 6-second polling. The other phone's changes
    land within moments, and unchanged state costs nothing. */
 let dataLoadError = null;
+let lastLoadDiagnostic = null;
 function startRealtimeSync(){
   stopRealtimeSync();
   unsubscribeSnapshot = familyDocRef().onSnapshot(snap=>{
@@ -624,7 +625,20 @@ function startRealtimeSync(){
     if(snap.metadata.hasPendingWrites) return; // our own local write echo
     const data = snap.exists ? snap.data() : null;
     const remote = (data && data.json) ? JSON.parse(data.json) : null;
-    if(!remote){ if(wasInitial) render(); return; }
+    if(!remote){
+      lastLoadDiagnostic = {
+        signedInAs: authUser ? authUser.email : '(unknown)',
+        uid: authUser ? authUser.uid : '(unknown)',
+        projectId: firebaseConfig.projectId,
+        docPath: 'appdata/family',
+        docExists: snap.exists,
+        fromCache: snap.metadata.fromCache,
+        rawFieldKeys: data ? Object.keys(data) : null
+      };
+      console.log('[sync] no family data found — diagnostic:', lastLoadDiagnostic);
+      if(wasInitial) render();
+      return;
+    }
     const remoteJSON = JSON.stringify(remote);
     if(remoteJSON !== lastSnapshotJSON){
       lastSnapshotJSON = remoteJSON;
@@ -3439,16 +3453,28 @@ function renderOnboard(){
       <div class="mark">🌷🍼🌙</div>
       <h1>Let's set up her growth log!</h1>
       <p class="sub">This stays synced between both of your phones. Add her details to get started.</p>
+      ${lastLoadDiagnostic ? `
+      <div class="note" style="background:var(--surface-muted);border-radius:var(--radius-control);padding:12px 14px;margin-bottom:14px;text-align:left;">
+        <b>Before you continue:</b> if you're expecting to see an existing baby's data here, do not proceed — this means the app looked and found nothing under your account. Check the details below against your Firebase console first.<br><br>
+        Signed in as: <b>${escapeHtml(lastLoadDiagnostic.signedInAs)}</b><br>
+        Account UID: <span style="font-family:monospace;font-size:10.5px;">${escapeHtml(lastLoadDiagnostic.uid)}</span><br>
+        Looked at: <span style="font-family:monospace;font-size:10.5px;">${escapeHtml(lastLoadDiagnostic.projectId)} / ${escapeHtml(lastLoadDiagnostic.docPath)}</span><br>
+        Document found: <b>${lastLoadDiagnostic.docExists ? 'Yes, but empty/unreadable' : 'No'}</b>
+      </div>
+      <button class="ql-link" id="obSignOutInstead">Wrong account? Sign out</button>
+      ` : ''}
       <label>Baby's name</label>
       <input type="text" id="obName" placeholder="e.g. Amara">
       <label>Date of birth</label>
       <input type="date" id="obDob" value="${todayDateInput()}">
       <button class="btn" id="obSave">Start tracking 🌱</button>
-      <p class="note">Growth percentiles use WHO standards for girls. Data syncs automatically across every device that opens this app — no login needed. Anyone with the link can view and add entries, so only share it with people you trust with her data.</p>
+      <p class="note">Growth percentiles use WHO standards for girls. Data syncs automatically to any signed-in family account.</p>
     </div>
   `;
 }
 function bindOnboard(){
+  const soi = document.getElementById('obSignOutInstead');
+  if(soi) soi.addEventListener('click', async ()=>{ try{ await signOutUser(); } catch(e){ console.error(e); } });
   document.getElementById('obSave').addEventListener('click', async ()=>{
     const name = document.getElementById('obName').value.trim();
     const dob = document.getElementById('obDob').value;
