@@ -1251,6 +1251,31 @@ function checkBounds(value, key){
   if(value < b.min || value > b.max) return `${b.label} should be between ${b.min} and ${b.max}${b.unit}`;
   return null;
 }
+/* Growth trend plausibility — a soft, dismissible warning (not a hard block) when a new
+   measurement is a big jump from the baby's own recent trend, given how much time has
+   passed. Physiologically-bounded, generous rates so real growth never gets flagged. */
+const GROWTH_RATE_BOUNDS = {
+  weight: { maxGainPerDay:0.05, maxLossPerDay:0.04, tolerance:0.2 },
+  length: { maxGainPerDay:0.2,  maxLossPerDay:0.1,  tolerance:1.5 },
+  hc:     { maxGainPerDay:0.1,  maxLossPerDay:0.05, tolerance:1 }
+};
+function mostRecentPriorMeasurement(type, beforeISO, excludeId){
+  const list = state.measurements.filter(m=> m.type===type && m.id!==excludeId && new Date(m.date) < new Date(beforeISO));
+  if(!list.length) return null;
+  return list.sort((a,b)=> new Date(b.date)-new Date(a.date))[0];
+}
+function checkPlausibleGrowth(type, newVal, newDateISO, prevEntry){
+  const r = GROWTH_RATE_BOUNDS[type];
+  if(!r || !prevEntry) return null;
+  const days = Math.max(0.5, (new Date(newDateISO) - new Date(prevEntry.date)) / 86400000);
+  const diff = newVal - prevEntry.value;
+  const maxGain = r.maxGainPerDay*days + r.tolerance;
+  const maxLoss = r.maxLossPerDay*days + r.tolerance;
+  if(diff > maxGain) return `That's a big jump from her last ${labelType(type).toLowerCase()} — ${prevEntry.value}${unitFor(type)} on ${fmtDate(prevEntry.date)}. Save anyway?`;
+  if(diff < -maxLoss) return `That's a big drop from her last ${labelType(type).toLowerCase()} — ${prevEntry.value}${unitFor(type)} on ${fmtDate(prevEntry.date)}. Save anyway?`;
+  return null;
+}
+let outlierWarning = null;
 /* Preserves whatever the user has typed in the open sheet across a same-step
    re-render (changing the time, revealing the note field, switching a segment). */
 function fVal(id, fallback){ return (sheetDraft[id] !== undefined) ? sheetDraft[id] : (fallback==null ? '' : fallback); }
@@ -1299,6 +1324,7 @@ function startEditEntry(kind, id){
   sheetDraft = {};
   sheetShowTime = true;
   sheetShowDetails = true;
+  outlierWarning = null;
   if(kind==='feed'){ currentFeedSubtype = item.type; sheetPumpForced = false; }
   if(kind==='nappy'){ currentNappyType = item.type; }
   if(kind==='sleep'){ currentSleepType = item.label; }
@@ -1330,6 +1356,7 @@ function flashButtonSuccess(id, label){
 function goToStep(key){
   cancelEditing();
   sheetDraft = {};
+  outlierWarning = null;
   sheetShowTime=false; sheetShowDetails=false;
   if(key==='pump'){ sheetStep='feed'; sheetPumpForced=true; }
   else { sheetStep=key; sheetPumpForced=false; }
@@ -1582,7 +1609,8 @@ function renderQuickLogWeight(){
     <input type="number" step="0.01" inputmode="decimal" id="qlMeasureVal" placeholder="e.g. 3.65" value="${fVal('qlMeasureVal', isEdit?editingItem.value:'')}" autofocus>
     ${nowTimeRow('qlMeasureDate', false, isEdit?editingItem.date:null)}
     ${sheetShowDetails ? `<label>Note (optional)</label><input type="text" id="qlMeasureNote" placeholder="optional" value="${escapeHtml(fVal('qlMeasureNote', isEdit?editingItem.note:''))}">` : `<button class="ql-link" id="qlMeasureAddDetails">Add note</button>`}
-    <button class="btn" id="qlSaveMeasure" data-mtype="${mtype}">${isEdit?'Save changes':'Save measurement'}</button>
+    ${outlierWarning ? `<div class="note" id="growthWarnBox" style="background:var(--status-attention-bg);color:var(--status-attention-fg);border-radius:var(--radius-control);padding:11px 13px;margin-top:10px;font-weight:600;">${escapeHtml(outlierWarning)}</div>` : ''}
+    <button class="btn" id="qlSaveMeasure" data-mtype="${mtype}">${outlierWarning ? 'Save anyway' : (isEdit?'Save changes':'Save measurement')}</button>
     ${isEdit ? `<button class="ql-link" id="deleteMeasureBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
@@ -1763,6 +1791,10 @@ function bindSheet(){
       const mt = b.dataset.mt;
       document.getElementById('qlMeasureLabel').textContent = mt==='weight'?'Weight (kg)':mt==='length'?'Length (cm)':'Head circumference (cm)';
       document.getElementById('qlSaveMeasure').dataset.mtype = mt;
+      outlierWarning = null;
+      const warnBox = document.getElementById('growthWarnBox');
+      if(warnBox) warnBox.remove();
+      document.getElementById('qlSaveMeasure').textContent = (editingKind==='measurement' ? 'Save changes' : 'Save measurement');
     });
   });
   const qlMeasureAddDetails = document.getElementById('qlMeasureAddDetails');
@@ -1774,11 +1806,21 @@ function bindSheet(){
     const date = document.getElementById('qlMeasureDate').value;
     if(!val){ toast('Enter a value'); return; }
     const err = checkBounds(val, mtype); if(err){ toast(err); return; }
+    const dateISO = new Date(date).toISOString();
+    const prevEntry = mostRecentPriorMeasurement(mtype, dateISO, editingId);
+    const warning = prevEntry ? checkPlausibleGrowth(mtype, val, dateISO, prevEntry) : null;
+    if(warning && outlierWarning !== warning){
+      captureSheetDraft();
+      outlierWarning = warning;
+      renderSheet();
+      return;
+    }
+    outlierWarning = null;
     const note = document.getElementById('qlMeasureNote') ? document.getElementById('qlMeasureNote').value.trim() : '';
     if(editingKind==='measurement' && editingId){
-      updateEntry('measurement', editingId, {type:mtype, date:new Date(date).toISOString(), value:val, note});
+      updateEntry('measurement', editingId, {type:mtype, date:dateISO, value:val, note});
     } else {
-      state.measurements.push({id:uid(), type:mtype, date:new Date(date).toISOString(), value:val, note});
+      state.measurements.push({id:uid(), type:mtype, date:dateISO, value:val, note});
     }
     await saveKey('measurements', state.measurements);
     await flashButtonSuccess('qlSaveMeasure', '✓ Logged'); closeSheet(); renderMain();
