@@ -29,20 +29,22 @@
     --surface-muted:#F5F3F7;
     --line:#EBE7EE;
 
-    /* Text hierarchy */
+    /* Text hierarchy — tuned to meet WCAG AA (4.5:1 body text, 3:1 large/UI
+       text) against both --canvas and --card, while keeping ink-tertiary
+       visibly quieter than ink-soft so the hierarchy itself stays intact. */
     --ink:#332C3A;
-    --ink-soft:#847C8D;
-    --ink-tertiary:#AFA8B7;
+    --ink-soft:#7B7383;
+    --ink-tertiary:#918B98;
 
     /* Status system: icon + label + colour, never colour alone */
     --status-neutral-bg:#F1EFF4;
-    --status-neutral-fg:#847C8D;
+    --status-neutral-fg:#7B7383;
     --status-positive-bg:rgba(143,205,187,.28);
-    --status-positive-fg:#3F8874;
+    --status-positive-fg:#377665;
     --status-attention-bg:rgba(246,209,134,.35);
-    --status-attention-fg:#8A6A24;
+    --status-attention-fg:#886823;
     --status-critical-bg:rgba(236,147,132,.28);
-    --status-critical-fg:#C15D4B;
+    --status-critical-fg:#A24E3F;
 
     /* Radius tiers */
     --radius-major:22px;
@@ -217,6 +219,8 @@
     background:var(--surface-muted); font-family:'Nunito',sans-serif; font-size:15px; color:var(--ink);
   }
   input:focus,select:focus,textarea:focus{ outline:none; border-color:var(--lavender); }
+  input::placeholder,textarea::placeholder{ color:var(--ink-tertiary); opacity:1; }
+  button:disabled{ opacity:0.55; cursor:default; }
   .seg{ display:flex; gap:8px; }
   .seg button{
     flex:1; padding:11px 6px; border:2px solid var(--line); border-radius:14px;
@@ -447,6 +451,12 @@
   .moment-viewer-navbtn{ position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.16); border:none; color:#fff; width:34px; height:34px; border-radius:50%; font-size:18px; cursor:pointer; }
   .rhythm-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; flex-shrink:0; }
   .rhythm-row{ display:flex; align-items:center; background:var(--card); border-radius:var(--radius-small); padding:3px 8px; box-shadow:var(--shadow-1); font-size:10.5px; font-weight:600; color:var(--ink); white-space:nowrap; cursor:pointer; }
+  .qa-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
+  .qa-btn{ display:flex; flex-direction:column; align-items:center; gap:5px; background:var(--card); border:none; border-radius:var(--radius-control); box-shadow:var(--shadow-1); padding:11px 4px; font-family:'Nunito',sans-serif; font-weight:700; font-size:10.5px; color:var(--ink-soft); cursor:pointer; line-height:1.3; }
+  .qa-btn.qa-active{ background:var(--lavender-deep); color:#fff; }
+  .qa-btn.qa-active svg{ stroke:#fff; }
+  .qa-subrow{ display:flex; gap:8px; margin:-6px 0 14px; }
+  .qa-subrow button{ flex:1; background:var(--surface-muted); border:none; border-radius:var(--radius-control); padding:9px; font-family:'Nunito',sans-serif; font-weight:700; font-size:12px; color:var(--ink); cursor:pointer; }
   .insight-item{ padding:9px 0; border-bottom:1px dashed var(--line); font-size:12.5px; line-height:1.55; }
   .insight-card{ padding-bottom:10px; border-bottom:1px dashed var(--line); }
   .insight-card:last-child{ border-bottom:none; padding-bottom:0; }
@@ -617,6 +627,12 @@ function getCurrentParentProfile(){
   if(authUser && authUser.displayName) return { role: authUser.displayName, email };
   return { role: null, email };
 }
+/* Small helper for stamping newly created records with who logged them —
+   presentation metadata only, never used for authorization. */
+function attributionFields(){
+  const p = getCurrentParentProfile();
+  return { createdBy: p.email||null, createdByRole: p.role||null };
+}
 function timeAwareGreeting(role){
   if(!role) return 'Hi there';
   const hour = new Date().getHours();
@@ -651,7 +667,12 @@ function buildPayload(){
     temperatures: state.temperatures,
     healthRecords: state.healthRecords,
     activeSleep: state.activeSleep,
-    photoBooks: state.photoBooks
+    photoBooks: state.photoBooks,
+    tummyTime: state.tummyTime,
+    activeTummyTime: state.activeTummyTime,
+    activeBreastfeed: state.activeBreastfeed,
+    milestoneObservations: state.milestoneObservations,
+    triedActivities: state.triedActivities
   };
 }
 async function firestoreGet(){
@@ -687,7 +708,13 @@ function applyRemote(remote){
   state.healthRecords = remote.healthRecords || [];
   state.activeSleep = remote.activeSleep || null;
   state.photoBooks = remote.photoBooks || [];
+  state.tummyTime = remote.tummyTime || [];
+  state.activeTummyTime = remote.activeTummyTime || null;
+  state.activeBreastfeed = remote.activeBreastfeed || null;
+  state.milestoneObservations = remote.milestoneObservations || [];
+  state.triedActivities = remote.triedActivities || [];
   if(state.activeSleep) startSleepTicker(); else stopSleepTicker();
+  if(state.activeTummyTime || state.activeBreastfeed) startFastTicker(); else stopFastTicker();
 }
 function safeRerender(){
   if(!state.profile){ render(); return; }
@@ -786,7 +813,12 @@ let state = {
   temperatures: [],
   healthRecords: [],
   activeSleep: null,
-  photoBooks: []
+  photoBooks: [],
+  tummyTime: [],
+  activeTummyTime: null,
+  activeBreastfeed: null,
+  milestoneObservations: [],
+  triedActivities: []
 };
 let currentView = 'home';
 let currentGrowthTab = 'weight';
@@ -843,11 +875,143 @@ function startSleepTicker(){
   }, 20000);
 }
 function stopSleepTicker(){ if(sleepTickInterval){ clearInterval(sleepTickInterval); sleepTickInterval=null; } }
+let fastTickInterval = null;
+function fmtMMSS(totalSec){ totalSec=Math.max(0,Math.floor(totalSec)); const m=Math.floor(totalSec/60), s=totalSec%60; return `${m}:${String(s).padStart(2,'0')}`; }
+/* Both tummy time and breastfeeding use a "segments" array — each segment is
+   {start, end|null}; a null end means that segment is currently running
+   (i.e. not paused / not switched away from). Elapsed time is always summed
+   from these real timestamps, never from a JS counter, so it survives
+   refresh, backgrounding, and another device loading the same session. */
+function segmentsElapsedSec(segments){
+  return segments.reduce((sum,seg)=> sum + (((seg.end?new Date(seg.end):new Date()) - new Date(seg.start))/1000), 0);
+}
+function startFastTicker(){
+  stopFastTicker();
+  fastTickInterval = setInterval(()=>{
+    if(state.activeTummyTime){
+      const sec = segmentsElapsedSec(state.activeTummyTime.segments);
+      document.querySelectorAll('.tummy-elapsed-live').forEach(el=> el.textContent = fmtMMSS(sec));
+    }
+    if(state.activeBreastfeed){
+      const segs = state.activeBreastfeed.segments;
+      const cur = segs[segs.length-1];
+      const curSec = ((cur.end?new Date(cur.end):new Date()) - new Date(cur.start))/1000;
+      document.querySelectorAll('.breastfeed-elapsed-live').forEach(el=> el.textContent = fmtMMSS(curSec));
+      const totalMin = segmentsElapsedSec(segs)/60;
+      document.querySelectorAll('.breastfeed-total-live').forEach(el=> el.textContent = fmtDuration(totalMin));
+    }
+    if(!state.activeTummyTime && !state.activeBreastfeed) stopFastTicker();
+  }, 1000);
+}
+function stopFastTicker(){ if(fastTickInterval){ clearInterval(fastTickInterval); fastTickInterval=null; } }
+
+/* ---------------- Tummy time ---------------- */
+function startTummyTime(){
+  if(state.activeTummyTime) return false; // race guard: another device already started one
+  state.activeTummyTime = { id: uid(), segments:[{start:new Date().toISOString(), end:null}] };
+  startFastTicker();
+  saveKey('activeTummyTime', state.activeTummyTime);
+  return true;
+}
+function pauseTummyTime(){
+  if(!state.activeTummyTime) return;
+  const last = state.activeTummyTime.segments[state.activeTummyTime.segments.length-1];
+  if(!last.end) last.end = new Date().toISOString();
+  saveKey('activeTummyTime', state.activeTummyTime);
+}
+function resumeTummyTime(){
+  if(!state.activeTummyTime) return;
+  state.activeTummyTime.segments.push({start:new Date().toISOString(), end:null});
+  saveKey('activeTummyTime', state.activeTummyTime);
+}
+function isTummyTimePaused(){
+  if(!state.activeTummyTime) return false;
+  const last = state.activeTummyTime.segments[state.activeTummyTime.segments.length-1];
+  return !!last.end;
+}
+async function finishTummyTime(note){
+  if(!state.activeTummyTime) return null;
+  const segs = state.activeTummyTime.segments;
+  const last = segs[segs.length-1];
+  if(!last.end) last.end = new Date().toISOString();
+  const durationSeconds = Math.round(segmentsElapsedSec(segs));
+  const parent = getCurrentParentProfile();
+  const now = new Date().toISOString();
+  const rec = { id: state.activeTummyTime.id, startedAt: segs[0].start, endedAt: last.end, durationSeconds,
+    note: note||'', source:'timer', createdBy: parent.email||null, createdByRole: parent.role||null, createdAt: now, updatedAt: now };
+  state.tummyTime.push(rec);
+  state.activeTummyTime = null;
+  stopFastTicker();
+  await saveKey('tummyTime', state.tummyTime);
+  return rec;
+}
+function cancelTummyTime(){ state.activeTummyTime=null; stopFastTicker(); saveKey('activeTummyTime', null); }
+
+/* ---------------- Breastfeeding timer ---------------- */
+function lastCompletedBreastfeedSide(){
+  const list = state.feeds.map(normalizeFeed).filter(f=>f.type==='breastfeeding' && f.finalSide).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return list[0] ? list[0].finalSide : null;
+}
+function suggestedNextBreastSide(){
+  const last = lastCompletedBreastfeedSide();
+  return last==='right' ? 'left' : last==='left' ? 'right' : 'left';
+}
+function startBreastfeed(side){
+  if(state.activeBreastfeed) return false;
+  state.activeBreastfeed = { id: uid(), segments:[{side: side||suggestedNextBreastSide(), start:new Date().toISOString(), end:null}] };
+  startFastTicker();
+  saveKey('activeBreastfeed', state.activeBreastfeed);
+  return true;
+}
+function switchBreastfeedSide(){
+  if(!state.activeBreastfeed) return;
+  const segs = state.activeBreastfeed.segments;
+  const last = segs[segs.length-1];
+  if(!last.end) last.end = new Date().toISOString();
+  segs.push({side: last.side==='left'?'right':'left', start:new Date().toISOString(), end:null});
+  saveKey('activeBreastfeed', state.activeBreastfeed);
+}
+function currentBreastfeedSide(){
+  if(!state.activeBreastfeed) return null;
+  return state.activeBreastfeed.segments[state.activeBreastfeed.segments.length-1].side;
+}
+async function finishBreastfeed(note){
+  if(!state.activeBreastfeed) return null;
+  const segs = state.activeBreastfeed.segments;
+  const last = segs[segs.length-1];
+  if(!last.end) last.end = new Date().toISOString();
+  let leftMins=0, rightMins=0;
+  segs.forEach(s=>{ const min=((new Date(s.end)-new Date(s.start))/60000); if(s.side==='left') leftMins+=min; else rightMins+=min; });
+  leftMins = Math.round(leftMins*10)/10; rightMins = Math.round(rightMins*10)/10;
+  const parent = getCurrentParentProfile();
+  const rec = {
+    id: state.activeBreastfeed.id, type:'breastfeeding', method:'breast',
+    date: segs[0].start, endAt: last.end,
+    leftMins, rightMins, totalMins: Math.round((leftMins+rightMins)*10)/10,
+    firstSide: segs[0].side, finalSide: last.side, note: note||'', source:'timer',
+    createdBy: parent.email||null, createdByRole: parent.role||null
+  };
+  state.feeds.push(rec);
+  state.activeBreastfeed = null;
+  stopFastTicker();
+  state.prefs = state.prefs||{}; state.prefs.lastBreastSide = rec.finalSide==='left'?'Left':'Right';
+  await saveKey('feeds', state.feeds);
+  return rec;
+}
+function cancelBreastfeed(){ state.activeBreastfeed=null; stopFastTicker(); saveKey('activeBreastfeed', null); }
 /* Naps before 7am/after 7pm are classified as night sleep; the parent can always
    correct this afterwards from Edit — it never affects the recorded duration. */
 function inferSleepType(startISO){
   const h = parseInt(sydDateParts(startISO).hour, 10);
   return (h>=19 || h<7) ? 'night' : 'nap';
+}
+function startSleepNow(){
+  if(state.activeSleep) return false;
+  const parent = getCurrentParentProfile();
+  state.activeSleep = { id: uid(), startAt: new Date().toISOString(), createdBy: parent.email||null, createdByRole: parent.role||null };
+  startSleepTicker();
+  saveKey('activeSleep', state.activeSleep);
+  return true;
 }
 async function wakeUpSleep(){
   if(!state.activeSleep) return null;
@@ -1196,7 +1360,7 @@ function buildChartSVG(type, points, maxAgeWindow){
   const rowCount = Math.min(24, Math.ceil(maxAge)) + 1;
   const dark = isDarkMode();
   const gridColor = dark ? 'rgba(61,53,68,0.55)' : 'rgba(237,227,242,0.7)';
-  const textColor = dark ? '#83788F' : '#AFA8B7';
+  const textColor = dark ? '#83788F' : '#918B98';
   const bandFill = dark ? '#C3AADD' : '#B79FD1';
   const childStroke = dark ? '#F2A796' : '#EC9384';
   const pointStroke = dark ? '#28232D' : '#fff';
@@ -1467,6 +1631,7 @@ let showWhoCurves = false;
 let sheetDraft = {};
 let editingKind = null, editingId = null, editingItem = null;
 let qlMomentPhotos = [], qlMomentPrimaryId = null, qlMomentFavourite = false, qlMomentPeople = [];
+let pendingMilestoneLinkId = null;
 let editingActiveSleepStart = false;
 let viewingMomentId = null;
 let viewingMomentPhotoIdx = 0;
@@ -1720,6 +1885,7 @@ function renderSheetContent(){
   if(sheetStep==='weight') return renderQuickLogWeight();
   if(sheetStep==='moment') return renderQuickLogMoment();
   if(sheetStep==='letter') return renderQuickLogLetter();
+  if(sheetStep==='tummymanual') return renderQuickLogTummyManual();
   if(sheetStep==='healthnote') return renderQuickLogHealthNote();
   if(sheetStep==='entryActions') return renderEntryActions();
   if(sheetStep==='detail') return renderDetailSheet();
@@ -1768,11 +1934,11 @@ function renderDetailSheet(){
       lines=[`${item.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(item.mins)}`, `${fmtTime(item.date)} – ${fmtTime(item.endAt)} · ${fmtDate(item.date)}`, item.note];
     }
   }
-  else if(sheetDetailKind==='measurement'){ title=labelType(item.type); lines=[`${item.value}${unitFor(item.type)}`, fmtDateTime(item.date), item.note]; }
+  else if(sheetDetailKind==='measurement'){ title=labelType(item.type); lines=[`${item.value}${unitFor(item.type)}`, fmtDateTime(item.date), item.note, item.createdByRole?'Logged by '+item.createdByRole:null]; }
   else if(sheetDetailKind==='vaccine'){ title=item.name; lines=[item.dose, item.givenDate?`Given ${fmtDate(item.givenDate)}`:'Not yet given', item.provider?('Provider: '+item.provider):null]; }
-  else if(sheetDetailKind==='appointment'){ title=item.title; lines=[fmtDateFull(item.date), item.note]; }
+  else if(sheetDetailKind==='appointment'){ title=item.title; lines=[fmtDateFull(item.date), item.note, item.createdByRole?'Logged by '+item.createdByRole:null]; }
   else if(sheetDetailKind==='temperature'){ title='Temperature'; lines=[`${item.tempC}°C · ${item.method}`, fmtDateTime(item.date), item.note]; }
-  else if(sheetDetailKind==='healthRecord'){ title=item.title; lines=[fmtDateTime(item.date), item.details]; }
+  else if(sheetDetailKind==='healthRecord'){ title=item.title; lines=[fmtDateTime(item.date), item.details, item.createdByRole?'Logged by '+item.createdByRole:null]; }
   else if(sheetDetailKind==='milestone'){ title=item.title; lines=[`${fmtDate(item.date)} · ${momentAgeLabel(item.date)}`, item.note]; }
   lines = lines.filter(Boolean);
   const canEdit = !!KIND_TO_STEP[sheetDetailKind];
@@ -2053,6 +2219,21 @@ function renderQuickLogLetter(){
     ${isEdit ? `<button class="ql-link" id="deleteMomentBtn" style="color:var(--status-critical-fg);">Delete entry</button>` : ''}
   `;
 }
+function openTummyManualEntry(){
+  sheetDraft = {};
+  sheetShowTime = true; sheetShowDetails = false;
+  sheetOpen = true; sheetStep = 'tummymanual'; sheetPumpForced = false;
+  renderSheet();
+}
+function renderQuickLogTummyManual(){
+  return `
+    <div class="sheet-title"><button class="back" data-backmenu="1">${icon('back',18)}</button>Log tummy time</div>
+    <label>Duration (min)</label><input type="number" inputmode="numeric" id="qlTummyMin" placeholder="5" value="${fVal('qlTummyMin','')}" autofocus>
+    ${nowTimeRow('qlTummyDate', false, null)}
+    <label>Note (optional)</label><input type="text" id="qlTummyNote" placeholder="optional" value="${fVal('qlTummyNote','')}">
+    <button class="btn" id="qlSaveTummyManual" style="margin-top:12px;">Save</button>
+  `;
+}
 function renderQuickLogHealthNote(){
   const isEdit = editingKind==='healthRecord';
   const cats = [{k:'symptom',l:'Symptom / illness'},{k:'medication',l:'Medication'},{k:'advice',l:'Doctor advice'},{k:'note',l:'Health note'},{k:'other',l:'Other'}];
@@ -2084,7 +2265,8 @@ function bindSheet(){
   document.querySelectorAll('[data-nappyquick]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       const type = b.dataset.nappyquick;
-      const rec = {id:uid(), type, date:new Date().toISOString(), note:''};
+      const parent = getCurrentParentProfile();
+      const rec = {id:uid(), type, date:new Date().toISOString(), note:'', createdBy:parent.email||null, createdByRole:parent.role||null};
       state.nappies.push(rec);
       await saveKey('nappies', state.nappies);
       closeSheet(); renderMain();
@@ -2166,11 +2348,9 @@ function bindSheet(){
 
   const startSleepBtn = document.getElementById('startSleepBtn');
   if(startSleepBtn) startSleepBtn.addEventListener('click', async ()=>{
-    if(state.activeSleep){ renderSheet(); return; } // race guard: another device already started one
+    if(state.activeSleep){ renderSheet(); return; }
     startSleepBtn.disabled = true;
-    state.activeSleep = { id: uid(), startAt: new Date().toISOString() };
-    startSleepTicker();
-    await saveKey('activeSleep', state.activeSleep);
+    startSleepNow();
     closeSheet(); renderMain();
     toast('😴 Sleep started');
   });
@@ -2282,7 +2462,7 @@ function bindSheet(){
     if(editingKind==='measurement' && editingId){
       updateEntry('measurement', editingId, {type:mtype, date:dateISO, value:val, note});
     } else {
-      state.measurements.push({id:uid(), type:mtype, date:dateISO, value:val, note});
+      state.measurements.push({id:uid(), type:mtype, date:dateISO, value:val, note, ...attributionFields()});
     }
     await saveKey('measurements', state.measurements);
     await flashButtonSuccess('qlSaveMeasure', '✓ Logged'); closeSheet(); renderMain();
@@ -2358,12 +2538,19 @@ function bindSheet(){
       photos: qlMomentPhotos, primaryPhotoId: qlMomentPrimaryId,
       favourite: qlMomentFavourite, people: qlMomentPeople, milestoneTag, location
     };
+    let newMomentId = null;
     if(editingKind==='milestone' && editingId){
       updateEntry('milestone', editingId, patch);
     } else {
-      state.milestones.push({id:uid(), includeInBook:true, ...patch});
+      newMomentId = uid();
+      state.milestones.push({id:newMomentId, includeInBook:true, ...patch});
     }
     await saveKey('milestones', state.milestones);
+    if(pendingMilestoneLinkId && newMomentId){
+      const idx = state.milestoneObservations.findIndex(o=>o.milestoneId===pendingMilestoneLinkId);
+      if(idx!==-1){ state.milestoneObservations[idx].linkedMomentId = newMomentId; await saveKey('milestoneObservations', state.milestoneObservations); }
+      pendingMilestoneLinkId = null;
+    }
     await flashButtonSuccess('qlSaveMoment', '✓ Saved'); closeSheet(); renderMain();
   });
   const saveLetterBtn = document.getElementById('qlSaveLetter');
@@ -2380,6 +2567,19 @@ function bindSheet(){
     }
     await saveKey('milestones', state.milestones);
     await flashButtonSuccess('qlSaveLetter', '✓ Saved'); closeSheet(); renderMain();
+  });
+  const saveTummyManualBtn = document.getElementById('qlSaveTummyManual');
+  if(saveTummyManualBtn) saveTummyManualBtn.addEventListener('click', async ()=>{
+    const min = parseFloat(document.getElementById('qlTummyMin').value);
+    const date = document.getElementById('qlTummyDate').value;
+    const note = document.getElementById('qlTummyNote').value.trim();
+    if(!min || min<=0){ toast('Enter a duration'); return; }
+    const parent = getCurrentParentProfile();
+    const startedAt = new Date(date).toISOString();
+    const rec = { id:uid(), startedAt, endedAt:new Date(new Date(startedAt).getTime()+min*60000).toISOString(), durationSeconds:Math.round(min*60), note, source:'manual', createdBy:parent.email||null, createdByRole:parent.role||null, createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() };
+    state.tummyTime.push(rec);
+    await saveKey('tummyTime', state.tummyTime);
+    await flashButtonSuccess('qlSaveTummyManual', '✓ Saved'); closeSheet(); renderMain();
   });
   const delMoment = document.getElementById('deleteMomentBtn');
   if(delMoment) delMoment.addEventListener('click', ()=> deleteEntryWithUndo('milestone', editingId));
@@ -2468,7 +2668,35 @@ function lastFeedInfo(){
   const list = state.feeds.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
   if(!list.length) return null;
   const nf = normalizeFeed(list[0]);
-  return { ago: timeAgo(nf.date), line: feedSummaryLine(list[0]) };
+  return { ago: timeAgo(nf.date), line: feedSummaryLine(list[0]), finalSide: nf.finalSide||null };
+}
+function renderHomeQuickActions(){
+  const sleepActive = !!state.activeSleep;
+  const feedActive = !!state.activeBreastfeed;
+  const tummyActive = !!state.activeTummyTime;
+  const sleepMins = sleepActive ? Math.max(0, Math.floor((Date.now()-new Date(state.activeSleep.startAt).getTime())/60000)) : 0;
+  return `
+    <div class="qa-grid">
+      <button class="qa-btn ${sleepActive?'qa-active':''}" data-qa="sleep">
+        ${icon('sleep',18)}
+        <span>${sleepActive?`Sleeping · <span class="sleep-elapsed-live" aria-live="off">${fmtDuration(sleepMins)}</span>`:'Sleep'}</span>
+      </button>
+      <button class="qa-btn ${feedActive?'qa-active':''}" data-qa="feed">
+        ${icon('feed',18)}
+        <span>${feedActive?`${currentBreastfeedSide()==='left'?'Left':'Right'} · <span class="breastfeed-elapsed-live">0:00</span>`:'Feed'}</span>
+      </button>
+      <button class="qa-btn" data-qa="nappy">
+        ${icon('nappy',18)}
+        <span>Nappy</span>
+      </button>
+      <button class="qa-btn ${tummyActive?'qa-active':''}" data-qa="tummy">
+        ${icon('care',18)}
+        <span>${tummyActive?`Tummy · <span class="tummy-elapsed-live">0:00</span>`:'Tummy time'}</span>
+      </button>
+    </div>
+    ${feedActive ? `<div class="qa-subrow"><button data-qa="feedswitch">Switch side</button><button data-qa="feedfinish">Finish</button></div>` : ''}
+    ${tummyActive ? `<div class="qa-subrow"><button data-qa="tummypause">${isTummyTimePaused()?'Resume':'Pause'}</button><button data-qa="tummyfinish">Finish</button></div>` : ''}
+  `;
 }
 function lastSleepInfo(){
   const list = state.sleeps.slice().sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -2573,6 +2801,12 @@ function renderHome(){
   return `
     <div class="meta-text" style="margin:-4px 0 12px;font-weight:600;">${timeAwareGreeting(parent.role)}</div>
     ${tempBanner}
+    ${renderHomeQuickActions()}
+    ${(() => { const p = suggestedPlayActivities(1)[0]; return p ? `
+    <div class="row-item" id="homeDevRow" style="cursor:pointer;">
+      <div class="main" style="font-weight:600;display:flex;align-items:center;gap:8px;">${icon('care',16)}Play idea · ${escapeHtml(p.title)}</div>
+      <div class="meta-text">View →</div>
+    </div>` : ''; })()}
     <div class="row-item" id="goAskLink" style="cursor:pointer;">
       <div class="main" style="font-weight:600;display:flex;align-items:center;gap:8px;">${icon('ask',16)}Ask ${escapeHtml(state.profile.name)}</div>
       <div class="meta-text">→</div>
@@ -2594,8 +2828,12 @@ function renderHome(){
       ${lastFeed ? `
         <div style="font-weight:800;font-size:15px;color:var(--ink);">${lastFeed.ago}</div>
         <div class="support-text" style="margin-top:4px;">${lastFeed.line.replace(/^🍼\s*/,'')}</div>
+        ${(!state.activeBreastfeed && lastFeed.finalSide) ? `
+          <div class="meta-text" style="margin-top:8px;">Last breast: ${lastFeed.finalSide==='left'?'Left':'Right'} · Other side: ${lastFeed.finalSide==='left'?'Right':'Left'}</div>
+          <button class="btn secondary" id="startOtherSideBtn" style="margin-top:10px;">Start ${lastFeed.finalSide==='left'?'Right':'Left'}</button>
+        ` : ''}
       ` : `<div class="support-text" style="margin-top:0;">Nothing logged yet.</div>`}
-      <button class="btn" id="logFeedBtn" style="margin-top:14px;">Log feed</button>
+      ${!state.activeBreastfeed ? `<button class="btn" id="logFeedBtn" style="margin-top:14px;">Log feed</button>` : ''}
     </div>
 
     <div class="surface-group" style="padding:13px 16px;display:flex;justify-content:space-between;gap:6px;font-size:12.5px;font-weight:700;color:var(--ink);">
@@ -2642,6 +2880,35 @@ function renderHome(){
 function bindHome(){
   const lfb = document.getElementById('logFeedBtn');
   if(lfb) lfb.addEventListener('click', ()=> openSheet('feed'));
+  const sosb = document.getElementById('startOtherSideBtn');
+  if(sosb) sosb.addEventListener('click', ()=>{
+    const side = lastFeedInfo() && lastFeedInfo().finalSide==='left' ? 'right' : 'left';
+    const ok=startBreastfeed(side); renderMain(); toast(ok?`🍼 ${side==='left'?'Left':'Right'} started`:'Already feeding on another device');
+  });
+  document.querySelectorAll('[data-qa]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const action = b.dataset.qa;
+      if(action==='sleep'){
+        if(state.activeSleep){ await handleWakeUp(false); }
+        else { const ok=startSleepNow(); renderMain(); toast(ok?'😴 Sleep started':'Already sleeping on another device'); }
+      } else if(action==='feed'){
+        if(!state.activeBreastfeed){ const side=suggestedNextBreastSide(); const ok=startBreastfeed(side); renderMain(); toast(ok?`🍼 ${side==='left'?'Left':'Right'} started`:'Already feeding on another device'); }
+      } else if(action==='feedswitch'){
+        switchBreastfeedSide(); renderMain();
+      } else if(action==='feedfinish'){
+        const rec = await finishBreastfeed(); if(rec) { renderMain(); showUndoToast(`✓ Feed logged · ${fmtDuration(rec.totalMins)}`, async ()=>{ state.feeds=state.feeds.filter(x=>x.id!==rec.id); state.activeBreastfeed={id:rec.id, segments:[{side:rec.firstSide,start:rec.date,end:null}]}; startFastTicker(); await saveKey('feeds', state.feeds); renderMain(); }); }
+      } else if(action==='nappy'){
+        openSheet('nappy');
+      } else if(action==='tummy'){
+        if(!state.activeTummyTime){ const ok=startTummyTime(); renderMain(); toast(ok?'🤸 Tummy time started':'Already running on another device'); }
+      } else if(action==='tummypause'){
+        if(isTummyTimePaused()) resumeTummyTime(); else pauseTummyTime();
+        renderMain();
+      } else if(action==='tummyfinish'){
+        const rec = await finishTummyTime(); if(rec) { renderMain(); showUndoToast(`✓ Tummy time logged · ${fmtMMSS(rec.durationSeconds)}`, async ()=>{ state.tummyTime=state.tummyTime.filter(x=>x.id!==rec.id); state.activeTummyTime={id:rec.id, segments:[{start:rec.startedAt,end:null}]}; startFastTicker(); await saveKey('tummyTime', state.tummyTime); renderMain(); }); }
+      }
+    });
+  });
   const gtl = document.getElementById('goTimelineLink');
   if(gtl) gtl.addEventListener('click', ()=>{ currentView='timeline'; render(); });
   const ggl = document.getElementById('goGrowthLink');
@@ -2656,6 +2923,8 @@ function bindHome(){
   if(hic) hic.addEventListener('click', ()=>{ currentView='care'; render(); });
   const gal = document.getElementById('goAskLink');
   if(gal) gal.addEventListener('click', ()=>{ currentView='ask'; render(); });
+  const hdr = document.getElementById('homeDevRow');
+  if(hdr) hdr.addEventListener('click', ()=>{ currentView='care'; careSubView='devplay'; render(); });
 }
 
 /* ---------------- Add (unified quick-log hub) ---------------- */
@@ -2889,7 +3158,7 @@ function bindAdd(){
       const date = document.getElementById('mDate').value;
       const note = document.getElementById('mNote').value.trim();
       if(!val || !date){ toast('Enter a date and value'); return; }
-      state.measurements.push({id:uid(), type, date:new Date(date).toISOString(), value:val, note});
+      state.measurements.push({id:uid(), type, date:new Date(date).toISOString(), value:val, note, ...attributionFields()});
       await saveKey('measurements', state.measurements);
       toast('Saved 🌱'); currentView='home'; render();
     });
@@ -2915,7 +3184,7 @@ function bindAdd(){
       if(!title || !date){ toast('Enter a title and time'); return; }
       currentHealthCat = cat;
       state.prefs = state.prefs||{}; state.prefs.lastHealthCat = cat;
-      state.healthRecords.push({id:uid(), category:cat, title, date:new Date(date).toISOString(), details});
+      state.healthRecords.push({id:uid(), category:cat, title, date:new Date(date).toISOString(), details, ...attributionFields()});
       await saveKey('healthRecords', state.healthRecords);
       toast('Health record saved 📋'); currentView='home'; render();
     });
@@ -3703,7 +3972,7 @@ function compareToPreviousWeek(metric){
    deterministic JS against the real records, reusing the same aggregation
    functions used everywhere else in the app, and the final answer text is
    built entirely from those computed values via string templates. */
-const ASK_KNOWN_TYPES = ['lastEvent','countInRange','totalInRange','maxInRange','minInRange','bestDay','growthChange','weekCompare','dayShowAll','breastSide','nextEvent','listGiven','healthOverview','nextWeighIn','previousMeasurement','measurementOnDate','vaccineOverview','sleepOverview','feedOverview','nappyOverview','unanswerable','unknown'];
+const ASK_KNOWN_TYPES = ['lastEvent','countInRange','totalInRange','maxInRange','minInRange','bestDay','growthChange','weekCompare','dayShowAll','breastSide','nextEvent','listGiven','healthOverview','nextWeighIn','previousMeasurement','measurementOnDate','vaccineOverview','sleepOverview','feedOverview','nappyOverview','tummyStats','milestonesRecorded','milestoneNamed','activitiesToday','unanswerable','unknown'];
 const ASK_MEDICAL_PATTERN = /\b(enough milk|getting enough|low (milk )?supply|milk supply|reflux|dehydrat|overtired|is (this|that|she|it) normal|should i (be )?worry|is she (sick|ill|okay|ok)|diagnos|colic|allerg|intoleran|teething|constipat|underweight|overweight|failure to thrive)\b/i;
 function looksLikeMedicalQuestion(q){ return ASK_MEDICAL_PATTERN.test(q); }
 function resolveAskRange(range){
@@ -3899,6 +4168,53 @@ function executeListGiven(intent){
 function executeHealthOverview(){
   return { answer:"I can show her logged temperature, vaccines, appointments, or health notes — try asking about one of those specifically.", evidence:null };
 }
+function tummyStatsForRange(startMs, endMs){
+  const sessions = state.tummyTime.filter(t=>{ const s=new Date(t.startedAt).getTime(); return s>=startMs && s<endMs; });
+  let activeSec = 0;
+  if(state.activeTummyTime){
+    const segStart = new Date(state.activeTummyTime.segments[0].start).getTime();
+    if(segStart>=startMs && segStart<endMs) activeSec = segmentsElapsedSec(state.activeTummyTime.segments);
+  }
+  const totalSec = sessions.reduce((s,t)=>s+t.durationSeconds,0) + activeSec;
+  const count = sessions.length + (activeSec>0?1:0);
+  const longestSec = Math.max(0, ...sessions.map(t=>t.durationSeconds), activeSec);
+  return { sessions, totalSec, count, longestSec };
+}
+function executeTummyStats(intent){
+  const r = resolveAskRange(intent.range || {kind:'today'});
+  const stats = tummyStatsForRange(r.startMs, r.endMs);
+  if(intent.sub==='count') return { answer:`${stats.count} tummy time session${stats.count===1?'':'s'} logged ${r.label}.`, evidence:null };
+  if(intent.sub==='longest'){
+    if(!stats.longestSec) return { answer:`No tummy time logged ${r.label}.`, evidence:null };
+    return { answer:`Her longest tummy time session ${r.label} was ${fmtMMSS(stats.longestSec)}.`, evidence:null };
+  }
+  if(intent.sub==='latest'){
+    if(state.activeTummyTime) return { answer:`She's doing tummy time right now — started ${timeAgo(state.activeTummyTime.segments[0].start)}.`, evidence:null };
+    const list = state.tummyTime.slice().sort((a,b)=>new Date(b.startedAt)-new Date(a.startedAt));
+    if(!list.length) return { answer:'No tummy time logged yet.', evidence:null };
+    return { answer:`Her last tummy time session was ${timeAgo(list[0].startedAt)} — ${fmtMMSS(list[0].durationSeconds)}.`, evidence:null };
+  }
+  if(!stats.totalSec) return { answer:`No tummy time logged ${r.label}.`, evidence:null };
+  return { answer:`${fmtMMSS(stats.totalSec)} of tummy time logged ${r.label}${stats.count?` across ${stats.count} session${stats.count===1?'':'s'}`:''}.`, evidence: stats.sessions.map(t=>({label:fmtDateTime(t.startedAt), value:fmtMMSS(t.durationSeconds)})) };
+}
+function executeMilestonesRecorded(){
+  if(!state.milestoneObservations.length) return { answer:'No developmental milestones recorded yet.', evidence:null };
+  const list = state.milestoneObservations.slice().sort((a,b)=>new Date(a.observedDate)-new Date(b.observedDate));
+  return { answer:`${list.length} milestone${list.length===1?'':'s'} recorded so far.`, evidence: list.map(o=>{ const cat=MILESTONE_CATALOGUE.find(m=>m.id===o.milestoneId); return {label:fmtDate(o.observedDate), value:cat?cat.title:o.milestoneId}; }) };
+}
+function executeMilestoneNamed(intent){
+  const norm = intent.norm||'';
+  const cat = MILESTONE_CATALOGUE.find(m=> norm.includes(m.title.toLowerCase()) || m.title.toLowerCase().split(' ').some(w=>w.length>3 && norm.includes(w)));
+  if(!cat) return { answer:"I couldn't tell which milestone you meant.", evidence:null };
+  const obs = milestoneObservation(cat.id);
+  if(!obs) return { answer:`${cat.title} hasn't been recorded as observed yet.`, evidence:null };
+  return { answer:`${cat.title} was first recorded on ${fmtDate(obs.observedDate)}.`, evidence:null };
+}
+function executeActivitiesToday(){
+  const plays = suggestedPlayActivities(3);
+  if(!plays.length) return { answer:"No age-matched activities available right now.", evidence:null };
+  return { answer: `A few ideas: ${plays.map(p=>p.title).join(', ')}.`, evidence: plays.map(p=>({label:p.title, value:p.description})) };
+}
 /* Uses the same authoritative recent-trend projection already built for the
    Growth screen — Ask Keshavi never recalculates this itself. */
 function executeNextWeighIn(){
@@ -4026,6 +4342,10 @@ function executeAskIntent(intent){
     case 'nextEvent': return executeNextEvent(intent);
     case 'listGiven': return executeListGiven(intent);
     case 'healthOverview': return executeHealthOverview();
+    case 'tummyStats': return executeTummyStats(intent);
+    case 'milestonesRecorded': return executeMilestonesRecorded();
+    case 'milestoneNamed': return executeMilestoneNamed(intent);
+    case 'activitiesToday': return executeActivitiesToday();
     case 'nextWeighIn': return executeNextWeighIn();
     case 'previousMeasurement': return executePreviousMeasurement(intent);
     case 'measurementOnDate': return executeMeasurementOnDate(intent);
@@ -4096,7 +4416,8 @@ const ASK_DOMAINS = {
   vaccine: ['vaccine','vaccination','vaccinated','shot','jab','immunisation','immunization'],
   appointment: ['appointment','checkup','check-up','visit'],
   health: ['health','symptom','medication'],
-  moments: ['moment','moments','photo','photos','milestone']
+  moments: ['moment','moments','photo','photos','milestone'],
+  tummytime: ['tummy time','tummy','floor time','floortime']
 };
 /* ---- Explicit high-precedence signal patterns. These are checked before
    generic operation scoring within each domain resolver, because a specific
@@ -4275,6 +4596,12 @@ function buildIntentFromDomainOp(domain, operation, range, norm){
 
   if(domain==='moments') return {type:'lastEvent', metric:'moment'};
   if(domain==='health') return {type:'healthOverview'};
+  if(domain==='tummytime'){
+    if(operation==='max' || /\blongest\b/.test(norm)) return {type:'tummyStats', sub:'longest', range: range||{kind:'today'}};
+    if(operation==='count' || /\bhow many\b/.test(norm) && /\bsessions?\b/.test(norm)) return {type:'tummyStats', sub:'count', range: range||{kind:'today'}};
+    if(operation==='latest' || /^when\b|\blast\b/.test(norm)) return {type:'tummyStats', sub:'latest', range: range||{kind:'today'}};
+    return {type:'tummyStats', sub:'total', range: range||{kind:'today'}};
+  }
   return {type:'unknown'};
 }
 /* Fully local, deterministic intent classifier — no network call, no model in
@@ -4306,6 +4633,9 @@ function classifyAskIntentLocal(question){
      word from the feed synonym list, so they're handled explicitly rather
      than relying on domain scoring to find them. */
   if(/\bwhich (breast|side)\b/.test(norm)) return {type:'breastSide', mode:'last'};
+  if(/\bmilestones?\b.*\brecorded\b|\bwhat milestones\b|\bwhich milestones\b/.test(norm)) return {type:'milestonesRecorded'};
+  if(/\bwhen did we first\b|\bwhen was her first\b|\bfirst record/.test(norm)) return {type:'milestoneNamed', norm};
+  if(/\bactivit(y|ies)\b|\bwhat (can|could) we try\b|\bplay idea/.test(norm)) return {type:'activitiesToday'};
   if(/\bleft\b/.test(norm) && /\bright\b/.test(norm)){
     const wantsCompare = range || /\bmore\b|\bless\b|\bmost\b/.test(norm);
     return {type:'breastSide', mode: wantsCompare?'compare':'last', range: range||{kind:'thisWeek'}};
@@ -4525,7 +4855,7 @@ function buildBarChartSVG(buckets, dayKeys, todayKey, valueFn, opts){
   const barColor = opts.barColor || (dark?'#F2A796':'#EC9384');
   const noDataColor = dark ? '#3D3544' : '#EDE3F2';
   const labelColor = dark ? '#EDE8F0' : '#332C3A';
-  const textColor = dark ? '#83788F' : '#AFA8B7';
+  const textColor = dark ? '#83788F' : '#918B98';
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="overflow:visible" font-family="Nunito, sans-serif" role="img" aria-label="7 day chart, tap a bar for details">`;
   buckets.forEach((b,i)=>{
     const x = padL + i*(barW+barGap);
@@ -4744,6 +5074,85 @@ function bindWeekRhythm(){
   });
 }
 let careSubView = null;
+/* ================= Development ================= */
+const DEVELOPMENT_GUIDANCE = [
+  { id:'g-newborn', minAgeDays:0, maxAgeDays:27, title:'The newborn stage', summary:'Newborns sleep most of the day and communicate mainly through crying — this is normal and expected.', sourceName:'Raising Children Network', sourceReference:'raisingchildren.net.au' },
+  { id:'g-1m', minAgeDays:28, maxAgeDays:59, title:'Around 1 month', summary:'Babies at this stage may increasingly focus on faces, follow movement briefly, and start to settle into feeding rhythms.', sourceName:'CDC', sourceReference:'cdc.gov/ncbddd/actearly' },
+  { id:'g-2m', minAgeDays:60, maxAgeDays:89, title:'Around 2 months', summary:'Many babies begin social smiling, make cooing sounds, and can briefly hold their head up during tummy time.', sourceName:'CDC', sourceReference:'cdc.gov/ncbddd/actearly' },
+  { id:'g-3m', minAgeDays:90, maxAgeDays:119, title:'Around 3 months', summary:'Babies often bring their hands together, track objects with their eyes, and push up more strongly during tummy time.', sourceName:'CDC', sourceReference:'cdc.gov/ncbddd/actearly' },
+  { id:'g-4m', minAgeDays:120, maxAgeDays:149, title:'Around 4 months', summary:'Many babies laugh out loud, reach for toys, and roll from tummy to back.', sourceName:'CDC', sourceReference:'cdc.gov/ncbddd/actearly' },
+  { id:'g-6m', minAgeDays:150, maxAgeDays:209, title:'Around 6 months', summary:'Babies often sit with support, pass objects between hands, and begin babbling.', sourceName:'CDC', sourceReference:'cdc.gov/ncbddd/actearly' },
+  { id:'g-9m', minAgeDays:210, maxAgeDays:299, title:'Around 9 months', summary:'Many babies sit unaided, crawl or scoot, and respond to their name.', sourceName:'CDC', sourceReference:'cdc.gov/ncbddd/actearly' },
+  { id:'g-12m', minAgeDays:300, maxAgeDays:400, title:'Around 12 months', summary:'Babies often pull to stand, may take first steps, and use simple gestures like waving.', sourceName:'CDC', sourceReference:'cdc.gov/ncbddd/actearly' }
+];
+function currentStageGuidance(){
+  const ageDays = Math.floor((Date.now()-new Date(state.profile.birthDate).getTime())/86400000);
+  return DEVELOPMENT_GUIDANCE.find(g=> ageDays>=g.minAgeDays && ageDays<=g.maxAgeDays) || DEVELOPMENT_GUIDANCE[DEVELOPMENT_GUIDANCE.length-1];
+}
+const TUMMY_TIME_GUIDANCE = { summary:'Short, frequent awake and supervised sessions can be built up gradually as she gets stronger.', safetyNote:'Only during awake, supervised time — never for sleep.', sourceName:'Raising Children Network', sourceReference:'raisingchildren.net.au' };
+const PLAY_ACTIVITIES = [
+  { id:'p-face', minAgeDays:0, maxAgeDays:120, category:'Interaction', title:'Face-to-face talking', durationLabel:'2–5 min', description:'Hold her comfortably where she can see your face and talk or sing to her.' },
+  { id:'p-contrast', minAgeDays:0, maxAgeDays:90, category:'Vision', title:'High-contrast viewing', durationLabel:'2–5 min', description:'Show simple high-contrast black-and-white patterns about 20–30cm from her face.' },
+  { id:'p-tummyplay', minAgeDays:0, maxAgeDays:180, category:'Movement', title:'Supervised tummy play', durationLabel:'2–5 min', description:'Place a small toy just out of reach during tummy time to encourage reaching and lifting.' },
+  { id:'p-narrate', minAgeDays:30, maxAgeDays:365, category:'Communication', title:'Narrate your day', durationLabel:'Ongoing', description:'Describe what you are doing out loud — everyday narration builds early language.' },
+  { id:'p-texture', minAgeDays:60, maxAgeDays:365, category:'Sensory', title:'Texture exploration', durationLabel:'3–5 min', description:'Let her touch a few safe, differently-textured fabrics or toys under supervision.' },
+  { id:'p-reach', minAgeDays:90, maxAgeDays:365, category:'Movement', title:'Reach and grasp', durationLabel:'3–5 min', description:'Offer a light rattle or toy just within reach to encourage grasping.' },
+  { id:'p-peekaboo', minAgeDays:120, maxAgeDays:365, category:'Interaction', title:'Peekaboo', durationLabel:'2–5 min', description:'Simple peekaboo supports early object permanence and social delight.' },
+  { id:'p-mirror', minAgeDays:120, maxAgeDays:365, category:'Vision', title:'Mirror play', durationLabel:'3–5 min', description:'A baby-safe mirror can be fascinating — supervise closely.' },
+  { id:'p-singing', minAgeDays:0, maxAgeDays:365, category:'Communication', title:'Songs and rhymes', durationLabel:'5 min', description:'Simple songs and rhymes support language rhythm and bonding.' },
+  { id:'p-crawl', minAgeDays:180, maxAgeDays:365, category:'Movement', title:'Safe floor exploration', durationLabel:'10+ min', description:'Supervised open floor space to practise moving encourages developing mobility.' }
+];
+function eligiblePlayActivities(){
+  const ageDays = Math.floor((Date.now()-new Date(state.profile.birthDate).getTime())/86400000);
+  return PLAY_ACTIVITIES.filter(a=> ageDays>=a.minAgeDays && ageDays<=a.maxAgeDays);
+}
+function suggestedPlayActivities(n){
+  const lastTried = {};
+  state.triedActivities.forEach(t=>{ if(!lastTried[t.activityId] || new Date(t.date)>new Date(lastTried[t.activityId])) lastTried[t.activityId]=t.date; });
+  return eligiblePlayActivities().sort((a,b)=> (lastTried[a.id]?new Date(lastTried[a.id]).getTime():0) - (lastTried[b.id]?new Date(lastTried[b.id]).getTime():0)).slice(0, n||3);
+}
+const MILESTONE_CATALOGUE = [
+  { id:'m-smile', ageStage:'2 months', category:'Social / emotional', title:'Social smile', description:'Smiles spontaneously, especially at people.' },
+  { id:'m-coo', ageStage:'2 months', category:'Communication', title:'Cooing sounds', description:'Makes cooing, gurgling sounds.' },
+  { id:'m-headup', ageStage:'2 months', category:'Movement / physical', title:'Holds head up briefly', description:'Can briefly hold her head up during tummy time.' },
+  { id:'m-handstogether', ageStage:'4 months', category:'Movement / physical', title:'Hands together', description:'Brings hands together and may bring them to her mouth.' },
+  { id:'m-laugh', ageStage:'4 months', category:'Social / emotional', title:'First laugh', description:'Laughs out loud.' },
+  { id:'m-roll', ageStage:'4 months', category:'Movement / physical', title:'Rolls tummy to back', description:'Rolls over from tummy to back.' },
+  { id:'m-babble', ageStage:'6 months', category:'Communication', title:'Babbling', description:'Makes babbling sounds like "bah" or "mah".' },
+  { id:'m-sits', ageStage:'6 months', category:'Movement / physical', title:'Sits with support', description:'Sits without support for short periods.' },
+  { id:'m-stranger', ageStage:'9 months', category:'Social / emotional', title:'Stranger awareness', description:'May be clingy with familiar adults and wary of strangers.' },
+  { id:'m-crawl', ageStage:'9 months', category:'Movement / physical', title:'Crawling or scooting', description:'Moves around by crawling, scooting, or a similar method.' },
+  { id:'m-name', ageStage:'9 months', category:'Communication', title:'Responds to name', description:'Looks over when her name is called.' },
+  { id:'m-pull-stand', ageStage:'12 months', category:'Movement / physical', title:'Pulls to stand', description:'Pulls herself up to a standing position.' },
+  { id:'m-wave', ageStage:'12 months', category:'Communication', title:'Waves bye-bye', description:'Uses simple gestures like waving.' },
+  { id:'m-firstword', ageStage:'12 months', category:'Communication', title:'First word', description:'Says a first recognisable word.' }
+];
+function milestoneObservation(catalogueId){ return state.milestoneObservations.find(o=>o.milestoneId===catalogueId) || null; }
+function tummyTimeToday(){
+  const todayKey = sydDateKey();
+  const sessions = state.tummyTime.filter(t=> sydDateKey(t.startedAt)===todayKey);
+  const activeSec = state.activeTummyTime ? segmentsElapsedSec(state.activeTummyTime.segments) : 0;
+  const totalSec = sessions.reduce((s,t)=>s+t.durationSeconds,0) + activeSec;
+  return { totalSec, count: sessions.length + (state.activeTummyTime?1:0), longestSec: sessions.reduce((mx,t)=>Math.max(mx,t.durationSeconds),0) };
+}
+function tummyTimeWeek(){
+  const keys = get7DayKeys(0);
+  const todayKey = sydDateKey();
+  return keys.map(dayKey=>{
+    const sessions = state.tummyTime.filter(t=> sydDateKey(t.startedAt)===dayKey);
+    let sec = sessions.reduce((s,t)=>s+t.durationSeconds,0);
+    if(dayKey===todayKey && state.activeTummyTime) sec += segmentsElapsedSec(state.activeTummyTime.segments);
+    return { dayKey, sec, count: sessions.length, hasData: sessions.length>0 || (dayKey===todayKey && !!state.activeTummyTime) };
+  });
+}
+function nursingBalance(days){
+  const cutoff = Date.now()-days*86400000;
+  const list = state.feeds.map(normalizeFeed).filter(f=>f.type==='breastfeeding' && new Date(f.date).getTime()>=cutoff);
+  const leftMin = list.reduce((s,f)=>s+(f.leftMins||0),0), rightMin = list.reduce((s,f)=>s+(f.rightMins||0),0);
+  const total = leftMin+rightMin;
+  const leftSessions = list.filter(f=>(f.leftMins||0)>0).length, rightSessions = list.filter(f=>(f.rightMins||0)>0).length;
+  return { leftMin, rightMin, total, leftPct: total?Math.round(leftMin/total*100):0, rightPct: total?Math.round(rightMin/total*100):0, leftSessions, rightSessions, sessionCount:list.length };
+}
 /* ---------------- 24-Hour Rhythm view: Today/Yesterday/any date, one aligned timeline ---------------- */
 let rhythmDateKey = null;
 function shiftDayKey(dayKey, delta){ return sydDateKey(sydMidnightUTC(dayKey) + delta*86400000 + 43200000); }
@@ -4861,13 +5270,18 @@ function computeDailyBrief(){
   const sleepMin24 = effectiveSleepRecords().reduce((s,x)=> s+sleepMinutesInRange(x, cutoff, Date.now()), 0);
   const feeds24 = state.feeds.map(normalizeFeed).filter(f=> new Date(f.date).getTime()>=cutoff);
   const nappyStats24 = getNappyStatsForPeriod(cutoff, Date.now());
+  const tummyStats24 = tummyStatsForRange(cutoff, Date.now());
   const lastWetNappy = state.nappies.filter(n=>n.type==='wet'||n.type==='both').sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
   const lastTemp = state.temperatures.slice().sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
   const recentVaccine = state.vaccines.filter(v=>v.givenDate && new Date(v.givenDate).getTime()>=cutoff)[0];
   const recentAppt = state.appointments.filter(a=> a.status==='completed' && new Date(a.date).getTime()>=cutoff)[0];
   const recentMoment = state.milestones.filter(m=> new Date(m.date).getTime()>=cutoff)[0];
   const recentMeasurement = state.measurements.filter(m=> new Date(m.date).getTime()>=cutoff).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
-  return { sleepMin24, feedCount24: feeds24.length, wet24: nappyStats24.wet, dirty24: nappyStats24.dirty, lastWetNappy, lastTemp, recentVaccine, recentAppt, recentMoment, recentMeasurement };
+  const recentTried = state.triedActivities.filter(t=> new Date(t.date).getTime()>=cutoff).sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+  const recentTriedActivity = recentTried ? PLAY_ACTIVITIES.find(a=>a.id===recentTried.activityId) : null;
+  return { sleepMin24, feedCount24: feeds24.length, wet24: nappyStats24.wet, dirty24: nappyStats24.dirty,
+    tummySec24: tummyStats24.totalSec, tummyCount24: tummyStats24.count,
+    lastWetNappy, lastTemp, recentVaccine, recentAppt, recentMoment, recentMeasurement, recentTriedActivity };
 }
 function renderDailyBrief(){
   const b = computeDailyBrief();
@@ -4895,6 +5309,8 @@ function renderDailyBrief(){
         <div class="stat-div"></div>
         <div class="stat-cell"><div class="stat-val">${b.wet24}💧 ${b.dirty24}💩</div><div class="stat-lbl">Nappies</div></div>
       </div>
+      ${b.tummySec24>0 ? `<div class="meta-text" style="margin-top:10px;">Tummy time: ${fmtMMSS(b.tummySec24)} · ${b.tummyCount24} session${b.tummyCount24===1?'':'s'}</div>` : ''}
+      ${b.recentTriedActivity ? `<div class="meta-text" style="margin-top:2px;">Development: ${escapeHtml(b.recentTriedActivity.title)} tried</div>` : ''}
     </div>
     ${((b.lastTemp && new Date(b.lastTemp.date).getTime()>=recentCutoff) || b.recentVaccine || b.recentAppt || b.recentMeasurement || b.recentMoment) ? `
     <div class="card">
@@ -5141,6 +5557,7 @@ function renderCareOverview(){
     <div class="row-item" data-caresub="feeding" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('feed',17)}Feeding</div><div class="meta-text">→</div></div>
     <div class="row-item" data-caresub="sleep" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('sleep',17)}Sleep</div><div class="meta-text">→</div></div>
     <div class="row-item" data-caresub="nappies" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('nappy',17)}Nappies</div><div class="meta-text">→</div></div>
+    <div class="row-item" data-caresub="development" style="cursor:pointer;"><div class="main" style="display:flex;align-items:center;gap:9px;font-weight:600;">${icon('care',17)}Development</div><div class="meta-text">→</div></div>
 
     <div class="section-header">More</div>
     <div class="row-item" id="goBriefLink" style="cursor:pointer;">
@@ -5157,9 +5574,13 @@ function renderCareOverview(){
     </div>
   `;
 }
+let nursingBalancePeriod = 7;
 function renderCareFeeding(){
   const feeds = state.feeds.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,50);
   const ds = dailySummary();
+  const nb = nursingBalancePeriod===0 ? nursingBalance(1) : nursingBalance(nursingBalancePeriod);
+  const periodLabel = nursingBalancePeriod===0?'today':`last ${nursingBalancePeriod} days`;
+  const baseline = baselineStats(7);
   return `
     ${careBackHeader('Feeding')}
     <div class="card">
@@ -5167,10 +5588,24 @@ function renderCareFeeding(){
       <div class="rline">${ds.feedCount} feed${ds.feedCount===1?'':'s'}${ds.totalNursingMin?`, ${fmtDuration(ds.totalNursingMin)} total nursing`:''}${ds.avgIntervalMin!=null?`, avg interval ${fmtDuration(ds.avgIntervalMin)}`:''}</div>
     </div>
     <div class="card">
+      <h2>Nursing balance <span class="link" id="nbPeriodToggle">${periodLabel} →</span></h2>
+      ${nb.total>0 ? `
+        <div class="stat-row">
+          <div class="stat-cell"><div class="stat-val">${nb.leftPct}%</div><div class="stat-lbl">Left · ${Math.round(nb.leftMin)} min</div></div>
+          <div class="stat-div"></div>
+          <div class="stat-cell"><div class="stat-val">${nb.rightPct}%</div><div class="stat-lbl">Right · ${Math.round(nb.rightMin)} min</div></div>
+        </div>
+        <div class="meta-text" style="margin-top:8px;">Sessions using left: ${nb.leftSessions} · Sessions using right: ${nb.rightSessions}</div>
+      ` : `<div class="empty">No breastfeeding logged ${periodLabel}.</div>`}
+      ${baseline && baseline.feeds ? `
+        <div class="meta-text" style="margin-top:10px;">Feeds/day: ${Math.round(baseline.feeds.p25)}–${Math.round(baseline.feeds.p75)}${baseline.interval?` · Average interval: ${fmtDuration(baseline.interval.mean)}`:''}</div>
+      ` : ''}
+    </div>
+    <div class="card">
       <h2>History</h2>
       ${feeds.length ? feeds.map(f=>{ const nf=normalizeFeed(f); return `
         <div class="row-item">
-          <div><div class="main">${feedSummaryLine(f)}</div><div class="sub">${fmtDateTime(nf.date)}${nf.note?' · '+escapeHtml(nf.note):''}</div></div>
+          <div><div class="main">${feedSummaryLine(f)}</div><div class="sub">${fmtDateTime(nf.date)}${nf.createdByRole?' · Logged by '+escapeHtml(nf.createdByRole):''}${nf.note?' · '+escapeHtml(nf.note):''}</div></div>
           <button class="del" data-id="${f.id}" data-kind="feed">•••</button>
         </div>`; }).join('') : `<div class="empty">No feeds logged yet.<br>Tap ＋ to log one.</div>`}
     </div>
@@ -5223,16 +5658,235 @@ function renderCare(){
   if(careSubView==='feeding') return renderCareFeeding();
   if(careSubView==='sleep') return renderCareSleep();
   if(careSubView==='nappies') return renderCareNappies();
+  if(careSubView==='development') return renderDevelopmentHub();
+  if(careSubView==='devtummy') return renderDevTummyDetail();
+  if(careSubView==='devplay') return renderDevPlayDetail();
+  if(careSubView==='devmilestones') return renderDevMilestonesDetail();
   return renderCareOverview();
+}
+function renderPlayCard(a){
+  return `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;">
+        <div style="font-weight:800;font-size:14px;">${escapeHtml(a.title)}</div>
+        <div class="meta-text">${escapeHtml(a.durationLabel)}</div>
+      </div>
+      <div class="support-text" style="margin-top:5px;">${escapeHtml(a.description)}</div>
+      <div style="display:flex;gap:14px;margin-top:10px;">
+        <button class="ql-link" data-playtried="${a.id}" style="padding:0;">Tried today</button>
+        <button class="ql-link" data-playanother="${a.id}" style="padding:0;">Another idea</button>
+      </div>
+    </div>`;
+}
+function renderDevelopmentHub(){
+  const stage = currentStageGuidance();
+  const today = tummyTimeToday();
+  const plays = suggestedPlayActivities(2);
+  const observedCount = state.milestoneObservations.length;
+  const firstsCount = state.milestones.filter(m=>m.milestoneTag).length;
+  return `
+    <div class="hero"><button class="careBack2" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Care</button><h1>Development</h1></div>
+    <div class="card">
+      <h2>This stage</h2>
+      <div style="font-weight:800;font-size:14px;">${escapeHtml(stage.title)}</div>
+      <div class="support-text" style="margin-top:4px;">${escapeHtml(stage.summary)}</div>
+      <div class="meta-text" style="margin-top:8px;">Source: ${escapeHtml(stage.sourceName)}</div>
+    </div>
+
+    <div class="row-item" data-devsub="devtummy" style="cursor:pointer;">
+      <div class="main" style="font-weight:600;">Tummy time</div>
+      <div class="meta-text">${today.totalSec>0?fmtMMSS(today.totalSec)+' today':'Not logged today'} →</div>
+    </div>
+    ${!state.activeTummyTime
+      ? `<button class="btn secondary" id="devStartTummyBtn" style="margin:-6px 0 16px;">Start session</button>`
+      : `<button class="btn secondary" id="devGoActiveTummyBtn" style="margin:-6px 0 16px;">Tummy time running · <span class="tummy-elapsed-live">${fmtMMSS(segmentsElapsedSec(state.activeTummyTime.segments))}</span></button>`}
+
+    <div class="section-header">Play &amp; Learn<span class="link" id="goPlayLearnLink">See all →</span></div>
+    ${plays.length ? plays.map(renderPlayCard).join('') : `<div class="empty">No age-matched activities yet.</div>`}
+
+    <div class="row-item" data-devsub="devmilestones" style="cursor:pointer;margin-top:6px;">
+      <div class="main" style="font-weight:600;">Milestones &amp; Firsts</div>
+      <div class="meta-text">${observedCount} milestone${observedCount===1?'':'s'} · ${firstsCount} first${firstsCount===1?'':'s'} →</div>
+    </div>
+  `;
+}
+function renderDevTummyDetail(){
+  const today = tummyTimeToday();
+  const week = tummyTimeWeek();
+  const todayKey = sydDateKey();
+  const totalLogged = week.reduce((s,d)=>s+d.sec,0);
+  const loggedDays = week.filter(d=>d.hasData && d.dayKey!==todayKey);
+  const avgOnLogged = loggedDays.length ? loggedDays.reduce((s,d)=>s+d.sec,0)/loggedDays.length : null;
+  const sessionsTotal = week.reduce((s,d)=>s+d.count,0);
+  return `
+    ${careBackHeader('Tummy time')}
+    ${state.activeTummyTime ? `
+    <div class="card">
+      <div class="secondary-metric" style="color:var(--lavender-deep);">${isTummyTimePaused()?'Paused':'In progress'}</div>
+      <div class="hero-metric tummy-elapsed-live" style="font-size:30px;margin-top:2px;">${fmtMMSS(segmentsElapsedSec(state.activeTummyTime.segments))}</div>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn secondary" id="devTummyPauseBtn" style="flex:1;">${isTummyTimePaused()?'Resume':'Pause'}</button>
+        <button class="btn" id="devTummyFinishBtn" style="flex:1;">Finish</button>
+      </div>
+      <button class="ql-link" id="devTummyCancelBtn" style="color:var(--status-critical-fg);">Cancel session</button>
+    </div>
+    ` : `<button class="btn" id="devStartTummyBtn2" style="margin-bottom:6px;">Start session</button><button class="ql-link" id="devTummyManualBtn">Log manually</button>`}
+
+    <div class="card" style="margin-top:14px;">
+      <h2>Today</h2>
+      <div class="stat-row">
+        <div class="stat-cell"><div class="stat-val">${fmtMMSS(today.totalSec)}</div><div class="stat-lbl">Total</div></div>
+        <div class="stat-div"></div>
+        <div class="stat-cell"><div class="stat-val">${today.count}</div><div class="stat-lbl">Sessions</div></div>
+        <div class="stat-div"></div>
+        <div class="stat-cell"><div class="stat-val">${fmtMMSS(today.longestSec)}</div><div class="stat-lbl">Longest</div></div>
+      </div>
+    </div>
+
+    <div class="section-header">Last 7 days</div>
+    <div class="card">
+      ${week.map(d=>`<div class="rline">${d.dayKey===todayKey?'Today':new Date(d.dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',timeZone:APP_TZ})} · ${d.hasData?fmtMMSS(d.sec)+(d.dayKey===todayKey?' so far':''):'—'}</div>`).join('')}
+      <div class="meta-text" style="margin-top:10px;">Total logged ${fmtMMSS(totalLogged)} · ${avgOnLogged!=null?`Average on logged days ${fmtMMSS(avgOnLogged)}`:'Not enough logged days yet'} · ${sessionsTotal} sessions</div>
+    </div>
+
+    <div class="card" style="margin-top:14px;">
+      <h2>About tummy time</h2>
+      <div class="support-text" style="margin-top:0;">${escapeHtml(TUMMY_TIME_GUIDANCE.summary)}</div>
+      <div class="note" style="margin-top:8px;">${escapeHtml(TUMMY_TIME_GUIDANCE.safetyNote)}</div>
+      <div class="meta-text" style="margin-top:8px;">Source: ${escapeHtml(TUMMY_TIME_GUIDANCE.sourceName)}</div>
+    </div>
+
+    ${state.tummyTime.length ? `
+    <div class="section-header">History</div>
+    ${state.tummyTime.slice().sort((a,b)=>new Date(b.startedAt)-new Date(a.startedAt)).slice(0,20).map(t=>`
+      <div class="row-item">
+        <div><div class="main">${fmtMMSS(t.durationSeconds)}</div><div class="sub">${fmtDateTime(t.startedAt)}${t.createdByRole?' · Logged by '+escapeHtml(t.createdByRole):''}</div></div>
+        <button class="del" data-id="${t.id}" data-kind="tummytime">•••</button>
+      </div>`).join('')}
+    ` : ''}
+  `;
+}
+function renderDevPlayDetail(){
+  const eligible = eligiblePlayActivities();
+  const recentTried = state.triedActivities.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,6);
+  return `
+    ${careBackHeader('Play & Learn')}
+    ${eligible.map(renderPlayCard).join('')}
+    ${recentTried.length ? `
+    <div class="section-header">Recently tried</div>
+    ${recentTried.map(t=>{ const a = PLAY_ACTIVITIES.find(x=>x.id===t.activityId); return a ? `<div class="row-item"><div class="main">${escapeHtml(a.title)}</div><div class="meta-text">${sydDateKey(t.date)===sydDateKey()?'Today':fmtDate(t.date)}</div></div>` : ''; }).join('')}
+    ` : ''}
+  `;
+}
+function renderDevMilestonesDetail(){
+  const cats = ['Social / emotional','Communication','Cognitive','Movement / physical'];
+  const firsts = state.milestones.filter(m=>m.milestoneTag).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  return `
+    ${careBackHeader('Milestones & Firsts')}
+    ${cats.map(cat=>{
+      const items = MILESTONE_CATALOGUE.filter(m=>m.category===cat);
+      if(!items.length) return '';
+      return `
+        <div class="section-header">${cat}</div>
+        ${items.map(m=>{
+          const obs = milestoneObservation(m.id);
+          return `
+            <div class="card">
+              <div style="display:flex;justify-content:space-between;align-items:baseline;">
+                <div style="font-weight:800;font-size:13.5px;">${escapeHtml(m.title)}</div>
+                <div class="meta-text">${escapeHtml(m.ageStage)}</div>
+              </div>
+              <div class="support-text" style="margin-top:4px;">${escapeHtml(m.description)}</div>
+              ${obs
+                ? `<div class="meta-text" style="margin-top:8px;color:var(--lavender-deep);font-weight:700;">Observed · ${fmtDate(obs.observedDate)}</div>
+                   ${!obs.linkedMomentId ? `<button class="ql-link" data-savemomentmilestone="${m.id}" style="padding:6px 0 0;">Save as Moment</button>` : `<div class="meta-text">Linked to a Moment ✓</div>`}`
+                : `<button class="btn secondary" data-observemilestone="${m.id}" style="margin-top:10px;">Observed</button>`}
+            </div>`;
+        }).join('')}
+      `;
+    }).join('')}
+    <div class="section-header">Recent Firsts</div>
+    ${firsts.length ? firsts.slice(0,10).map(m=>`
+      <div class="row-item" data-viewmoment="${m.id}" style="cursor:pointer;">
+        <div class="main">${escapeHtml(m.title)}</div>
+        <div class="meta-text">${fmtDate(m.date)}</div>
+      </div>`).join('') : `<div class="empty">No Firsts tagged yet — add "First / milestone" when logging a Moment.</div>`}
+  `;
 }
 function bindCare(){
   const back = document.getElementById('careBack');
   if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
   document.querySelectorAll('.careBack2').forEach(b=>{
-    b.addEventListener('click', ()=>{ careSubView=null; renderMain(); });
+    b.addEventListener('click', ()=>{
+      careSubView = (careSubView==='devtummy'||careSubView==='devplay'||careSubView==='devmilestones') ? 'development' : null;
+      renderMain();
+    });
   });
-  document.querySelectorAll('[data-caresub]').forEach(b=>{
-    b.addEventListener('click', ()=>{ careSubView=b.dataset.caresub; renderMain(); });
+  document.querySelectorAll('[data-caresub], [data-devsub]').forEach(b=>{
+    b.addEventListener('click', ()=>{ careSubView=b.dataset.caresub||b.dataset.devsub; renderMain(); });
+  });
+  const goPlayLearnLink = document.getElementById('goPlayLearnLink');
+  if(goPlayLearnLink) goPlayLearnLink.addEventListener('click', ()=>{ careSubView='devplay'; renderMain(); });
+  const devStartTummyBtn = document.getElementById('devStartTummyBtn') || document.getElementById('devStartTummyBtn2');
+  if(devStartTummyBtn) devStartTummyBtn.addEventListener('click', ()=>{ const ok=startTummyTime(); careSubView='devtummy'; renderMain(); toast(ok?'🤸 Tummy time started':'Already running on another device'); });
+  const devGoActiveTummyBtn = document.getElementById('devGoActiveTummyBtn');
+  if(devGoActiveTummyBtn) devGoActiveTummyBtn.addEventListener('click', ()=>{ careSubView='devtummy'; renderMain(); });
+  const devTummyPauseBtn = document.getElementById('devTummyPauseBtn');
+  if(devTummyPauseBtn) devTummyPauseBtn.addEventListener('click', ()=>{ if(isTummyTimePaused()) resumeTummyTime(); else pauseTummyTime(); renderMain(); });
+  const devTummyFinishBtn = document.getElementById('devTummyFinishBtn');
+  if(devTummyFinishBtn) devTummyFinishBtn.addEventListener('click', async ()=>{
+    const rec = await finishTummyTime();
+    if(rec){ renderMain(); showUndoToast(`✓ Tummy time logged · ${fmtMMSS(rec.durationSeconds)}`, async ()=>{ state.tummyTime=state.tummyTime.filter(x=>x.id!==rec.id); state.activeTummyTime={id:rec.id, segments:[{start:rec.startedAt,end:null}]}; startFastTicker(); await saveKey('tummyTime', state.tummyTime); renderMain(); }); }
+  });
+  const devTummyCancelBtn = document.getElementById('devTummyCancelBtn');
+  if(devTummyCancelBtn) devTummyCancelBtn.addEventListener('click', ()=>{ cancelTummyTime(); renderMain(); });
+  const devTummyManualBtn = document.getElementById('devTummyManualBtn');
+  if(devTummyManualBtn) devTummyManualBtn.addEventListener('click', ()=>{ openTummyManualEntry(); });
+  document.querySelectorAll('[data-playtried]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id = b.dataset.playtried;
+      state.triedActivities.push({id:uid(), activityId:id, date:new Date().toISOString()});
+      await saveKey('triedActivities', state.triedActivities);
+      toast('✓ Marked as tried today'); renderMain();
+    });
+  });
+  document.querySelectorAll('[data-playanother]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.dataset.playanother;
+      const alt = eligiblePlayActivities().find(a=>a.id!==id);
+      if(alt){ state.prefs=state.prefs||{}; }
+      renderMain();
+    });
+  });
+  document.querySelectorAll('[data-observemilestone]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const catalogueItem = MILESTONE_CATALOGUE.find(m=>m.id===b.dataset.observemilestone);
+      if(!catalogueItem) return;
+      const parent = getCurrentParentProfile();
+      const obs = { id:uid(), milestoneId:catalogueItem.id, observedDate:new Date().toISOString(), note:'', linkedMomentId:null, createdBy:parent.email||null, createdByRole:parent.role||null, createdAt:new Date().toISOString() };
+      state.milestoneObservations.push(obs);
+      await saveKey('milestoneObservations', state.milestoneObservations);
+      renderMain();
+      showUndoToast(`✓ ${catalogueItem.title} observed`, async ()=>{
+        state.milestoneObservations = state.milestoneObservations.filter(x=>x.id!==obs.id);
+        await saveKey('milestoneObservations', state.milestoneObservations);
+        renderMain();
+      });
+    });
+  });
+  document.querySelectorAll('[data-savemomentmilestone]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const catalogueItem = MILESTONE_CATALOGUE.find(m=>m.id===b.dataset.savemomentmilestone);
+      const obs = catalogueItem ? milestoneObservation(catalogueItem.id) : null;
+      if(!catalogueItem || !obs) return;
+      cancelEditing();
+      qlMomentPhotos=[]; qlMomentPrimaryId=null; qlMomentFavourite=false; qlMomentPeople=[];
+      sheetDraft = { qlMomentTitle:catalogueItem.title, qlMomentDate:sydDateKey(obs.observedDate), qlMomentTag:catalogueItem.title };
+      pendingMilestoneLinkId = catalogueItem.id;
+      sheetShowTime = true; sheetShowDetails = true;
+      sheetOpen = true; sheetStep='moment'; sheetPumpForced=false;
+      renderSheet();
+    });
   });
   const gbl = document.getElementById('goBriefLink');
   if(gbl) gbl.addEventListener('click', ()=>{ currentView='brief'; render(); });
@@ -5240,6 +5894,11 @@ function bindCare(){
   if(grcl) grcl.addEventListener('click', ()=>{ recapYearMonth=null; currentView='recap'; render(); });
   const gtfc = document.getElementById('goTimelineFromCare');
   if(gtfc) gtfc.addEventListener('click', ()=>{ currentView='timeline'; render(); });
+  const nbPeriodToggle = document.getElementById('nbPeriodToggle');
+  if(nbPeriodToggle) nbPeriodToggle.addEventListener('click', ()=>{
+    nursingBalancePeriod = nursingBalancePeriod===7 ? 30 : nursingBalancePeriod===30 ? 0 : 7;
+    renderMain();
+  });
   bindRhythmBody();
   bindWeekRhythm();
   bindInsightCards();
@@ -6000,7 +6659,7 @@ function bindHealth(){
     if(!title || !date){ toast('Enter a title and time'); return; }
     currentHealthCat = cat;
     state.prefs = state.prefs||{}; state.prefs.lastHealthCat = cat;
-    state.healthRecords.push({id:uid(), category:cat, title, date:new Date(date).toISOString(), details});
+    state.healthRecords.push({id:uid(), category:cat, title, date:new Date(date).toISOString(), details, ...attributionFields()});
     await saveKey('healthRecords', state.healthRecords);
     toast('Health record saved 📋'); renderMain();
   });
@@ -6011,7 +6670,7 @@ function bindHealth(){
     const date = document.getElementById('apptDate').value;
     const note = document.getElementById('apptNote').value.trim();
     if(!title || !date){ toast('Enter a title and date'); return; }
-    state.appointments.push({id:uid(), title, date:new Date(date).toISOString(), note, status:'upcoming', questions:[]});
+    state.appointments.push({id:uid(), title, date:new Date(date).toISOString(), note, status:'upcoming', questions:[], ...attributionFields()});
     await saveKey('appointments', state.appointments);
     toast('Appointment saved 🗓️'); renderMain();
   });
@@ -6531,7 +7190,8 @@ const DELETE_MAP = {
   appointment: {arr:'appointments', key:'appointments'},
   nappy: {arr:'nappies', key:'nappies'},
   temperature: {arr:'temperatures', key:'temperatures'},
-  healthRecord: {arr:'healthRecords', key:'healthRecords'}
+  healthRecord: {arr:'healthRecords', key:'healthRecords'},
+  tummytime: {arr:'tummyTime', key:'tummyTime'}
 };
 function bindDeletes(){
   document.querySelectorAll('button.del, button.del-x').forEach(b=>{
