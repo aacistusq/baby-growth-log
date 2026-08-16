@@ -219,6 +219,9 @@
     background:var(--surface-muted); font-family:'Nunito',sans-serif; font-size:15px; color:var(--ink);
   }
   input:focus,select:focus,textarea:focus{ outline:none; border-color:var(--lavender); }
+  button:focus-visible, a:focus-visible, [role="button"]:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+    outline:2px solid var(--lavender-deep); outline-offset:2px;
+  }
   input::placeholder,textarea::placeholder{ color:var(--ink-tertiary); opacity:1; }
   button:disabled{ opacity:0.55; cursor:default; }
   .seg{ display:flex; gap:8px; }
@@ -414,14 +417,14 @@
   .menu-btn{ background:none; border:none; color:var(--ink-soft); font-size:18px; cursor:pointer; padding:4px 8px; font-weight:900; line-height:1; }
   .menu-panel{ background:var(--sky); border-radius:12px; padding:10px; margin:4px 0 12px; display:flex; flex-wrap:wrap; gap:6px; }
   .menu-panel button{ border:2px solid var(--line); background:var(--card); border-radius:20px; padding:7px 13px; font-size:11.5px; font-weight:700; color:var(--ink); cursor:pointer; font-family:'Nunito',sans-serif; }
-  .menu-panel button.danger{ color:var(--coral-deep); border-color:var(--coral); }
+  .menu-panel button.danger{ color:var(--status-critical-fg); border-color:var(--coral); }
   .status-chip{ display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:20px; font-size:10px; font-weight:800; white-space:nowrap; }
   .status-chip.upcoming{ background:var(--sky); color:var(--ink-soft); border:1px solid var(--line); }
-  .status-chip.due{ background:rgba(246,209,134,.4); color:#96742A; }
-  .status-chip.given{ background:rgba(143,205,187,.35); color:var(--mint-deep); }
+  .status-chip.due{ background:var(--status-attention-bg); color:var(--status-attention-fg); }
+  .status-chip.given{ background:var(--status-positive-bg); color:var(--status-positive-fg); }
   .status-chip.na{ background:var(--sky); color:var(--ink-soft); }
-  .urgent-banner{ background:rgba(236,147,132,.22); border:2px solid var(--coral); border-radius:16px; padding:14px 16px; margin-bottom:14px; font-size:13.5px; line-height:1.6; }
-  .urgent-banner .head{ font-weight:900; color:var(--coral-deep); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+  .urgent-banner{ background:var(--status-critical-bg); border:2px solid var(--coral); border-radius:16px; padding:14px 16px; margin-bottom:14px; font-size:13.5px; line-height:1.6; }
+  .urgent-banner .head{ font-weight:900; color:var(--status-critical-fg); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
   .qlist label.check{ display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:500; text-transform:none; color:var(--ink); margin:8px 0; cursor:pointer; }
   .qlist input[type=checkbox]{ width:auto; }
   .gallery-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-top:10px; }
@@ -451,6 +454,21 @@
   .moment-viewer-navbtn{ position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.16); border:none; color:#fff; width:34px; height:34px; border-radius:50%; font-size:18px; cursor:pointer; }
   .rhythm-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; flex-shrink:0; }
   .rhythm-row{ display:flex; align-items:center; background:var(--card); border-radius:var(--radius-small); padding:3px 8px; box-shadow:var(--shadow-1); font-size:10.5px; font-weight:600; color:var(--ink); white-space:nowrap; cursor:pointer; }
+  .rhythm-lanes{ position:relative; }
+  .rhythm-hour-label{ position:absolute; left:0; font-size:9px; color:var(--ink-tertiary); width:28px; }
+  .rhythm-gridline{ position:absolute; left:30px; right:0; border-top:1px solid var(--line); }
+  .rhythm-lane-head{ position:absolute; top:-18px; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-tertiary); }
+  .rhythm-sleep-block{ position:absolute; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .rhythm-sleep-icon{ font-size:11px; opacity:0.85; }
+  .rhythm-sleep-flag{ position:absolute; top:2px; right:3px; font-size:8px; font-weight:900; color:var(--ink-soft); }
+  .rhythm-marker{ position:absolute; display:flex; align-items:center; gap:4px; cursor:pointer; transform:translateY(-50%); white-space:nowrap; }
+  .rhythm-marker .rhythm-marker-time{ font-size:9px; font-weight:700; color:var(--ink-soft); background:var(--card); padding:1px 4px; border-radius:5px; box-shadow:var(--shadow-1); }
+  .rhythm-cluster{ position:absolute; display:flex; align-items:center; gap:4px; cursor:pointer; transform:translateY(-50%); white-space:nowrap; }
+  .rhythm-cluster .rhythm-marker-time{ font-size:9px; font-weight:800; color:#fff; background:var(--lavender-deep); padding:1px 5px; border-radius:5px; }
+  .rhythm-cluster-expand{ position:absolute; background:var(--card); border-radius:var(--radius-small); box-shadow:var(--shadow-2); padding:5px; z-index:3; }
+  .rhythm-cluster-expand .rhythm-marker{ position:static; transform:none; padding:3px 4px; }
+  .rhythm-now-line{ position:absolute; left:30px; right:0; border-top:2px solid var(--lavender-deep); z-index:2; }
+  .rhythm-now-dot{ position:absolute; left:-4px; top:-4px; width:8px; height:8px; border-radius:50%; background:var(--lavender-deep); }
   .qa-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
   .qa-btn{ display:flex; flex-direction:column; align-items:center; gap:5px; background:var(--card); border:none; border-radius:var(--radius-control); box-shadow:var(--shadow-1); padding:11px 4px; font-family:'Nunito',sans-serif; font-weight:700; font-size:10.5px; color:var(--ink-soft); cursor:pointer; line-height:1.3; }
   .qa-btn.qa-active{ background:var(--lavender-deep); color:#fff; }
@@ -686,9 +704,21 @@ async function firestorePatch(payload){
 }
 let lastSnapshotJSON = null;
 let suppressNextSnapshot = false;
+/* A random per-session id plus a monotonic local counter, embedded in every
+   write. This lets the sync listener tell "a stale echo of a write I've
+   since superseded" (e.g. a delete's confirmation arriving after I already
+   undid it) apart from "a genuinely newer change from the other parent's
+   device" — the root cause of Undo silently getting reverted by its own
+   delete's late-arriving echo. */
+const deviceId = uid();
+let localWriteSeq = 0;
 async function saveKey(key, value){
   try{
+    localWriteSeq++;
+    const mySeq = localWriteSeq;
     const payload = buildPayload();
+    payload._writeSeq = mySeq;
+    payload._writeDevice = deviceId;
     lastSnapshotJSON = JSON.stringify(payload);
     suppressNextSnapshot = true;
     await firestorePatch(payload);
@@ -757,6 +787,15 @@ function startRealtimeSync(){
       if(wasInitial) render();
       return;
     }
+    /* Ignore a snapshot that reflects one of OUR OWN writes we've since
+       superseded locally (e.g. a delete's confirmation arriving after Undo
+       already sent a newer write) — our local state is already ahead of it,
+       so applying it would silently revert the newer action. Genuinely new
+       changes from the other parent's device always carry a different
+       deviceId and are never affected by this check. */
+    if(remote && remote._writeDevice===deviceId && typeof remote._writeSeq==='number' && remote._writeSeq < localWriteSeq){
+      return;
+    }
     const remoteJSON = JSON.stringify(remote);
     if(remoteJSON !== lastSnapshotJSON){
       lastSnapshotJSON = remoteJSON;
@@ -821,6 +860,79 @@ let state = {
   triedActivities: []
 };
 let currentView = 'home';
+/* ================= Central navigation ================= */
+/* One stack-based system instead of scattered currentView='x' hardcoding.
+   navigateTo() snapshots enough state to restore the exact screen the user
+   was on (sub-view, selected tab/filter/day, scroll position) and pushes
+   real browser history so the Android/browser Back button behaves exactly
+   like the in-app Back control — both paths end up calling goBack(). */
+let navStack = [];
+const VIEW_PARENT = {
+  timeline:'home', ask:'home', settings:'home', brief:'care', recap:'care',
+  photobook:'milestones', photobookeditor:'photobook', photobookpreview:'photobookeditor',
+  care:'home', growth:'home', health:'home', milestones:'home'
+};
+const VIEW_LABEL = {
+  home:'Home', care:'Care', growth:'Growth', health:'Health', milestones:'Moments',
+  timeline:'Timeline', ask:'Ask', settings:'Settings', brief:'Care', recap:'Care',
+  photobook:'Moments', photobookeditor:'Photo Books', photobookpreview:'Edit book'
+};
+function snapshotNavState(){
+  return {
+    view: currentView, careSubView, healthSubView, growthTab: currentGrowthTab,
+    timelineFilter, weekMetric, weekActiveIdx, weekOffset, rhythmDateKey,
+    recapYearMonth, currentPhotoBookId, scrollY: window.scrollY
+  };
+}
+function restoreNavState(snap){
+  currentView = snap.view; careSubView = snap.careSubView; healthSubView = snap.healthSubView;
+  currentGrowthTab = snap.growthTab; timelineFilter = snap.timelineFilter;
+  weekMetric = snap.weekMetric; weekActiveIdx = snap.weekActiveIdx; weekOffset = snap.weekOffset;
+  rhythmDateKey = snap.rhythmDateKey; recapYearMonth = snap.recapYearMonth; currentPhotoBookId = snap.currentPhotoBookId;
+}
+/* Navigate to a secondary/drill-down screen, remembering exactly where we
+   came from. `opts` may set any of the same fields snapshotNavState reads. */
+function navigateTo(view, opts){
+  opts = opts || {};
+  navStack.push(snapshotNavState());
+  currentView = view;
+  if(opts.careSubView!==undefined) careSubView = opts.careSubView;
+  if(opts.healthSubView!==undefined) healthSubView = opts.healthSubView;
+  if(opts.rhythmDateKey!==undefined) rhythmDateKey = opts.rhythmDateKey;
+  if(opts.timelineFilter!==undefined) timelineFilter = opts.timelineFilter;
+  if(opts.weekMetric!==undefined) weekMetric = opts.weekMetric;
+  history.pushState({navDepth: navStack.length}, '', '#'+view);
+  render();
+}
+/* Root tabs (bottom nav) are independent stacks, not a linear history —
+   switching between them clears the back-stack rather than growing it. */
+function switchRootView(view){
+  navStack = [];
+  currentView = view; careSubView = null; healthSubView = null;
+  history.pushState({navDepth:0}, '', '#'+view);
+  render();
+}
+function goBack(){
+  if(navStack.length){
+    const snap = navStack.pop();
+    restoreNavState(snap);
+    render();
+    requestAnimationFrame(()=> window.scrollTo(0, snap.scrollY||0));
+  } else {
+    currentView = VIEW_PARENT[currentView] || 'home';
+    careSubView = null; healthSubView = null;
+    render();
+  }
+}
+/* Both the in-app "‹ Back" control and the real browser/Android Back button
+   end up here — pressing the in-app control just triggers browser history,
+   whose popstate handler calls goBack(), so there is exactly one code path
+   for "go back" rather than two that could drift out of sync. */
+function handleBackTap(){
+  if(navStack.length) history.back();
+  else goBack();
+}
+window.addEventListener('popstate', goBack);
 let currentGrowthTab = 'weight';
 let growthZoomed = true;
 let currentAddType = 'feed';
@@ -1018,7 +1130,7 @@ async function wakeUpSleep(){
   const startISO = state.activeSleep.startAt;
   const endISO = new Date().toISOString();
   const mins = Math.max(1, Math.round((new Date(endISO)-new Date(startISO))/60000));
-  const rec = { id: state.activeSleep.id, date: startISO, endAt: endISO, mins, label: inferSleepType(startISO), note:'', source:'timer' };
+  const rec = { id: state.activeSleep.id, date: startISO, endAt: endISO, mins, label: inferSleepType(startISO), note:'', source:'timer', createdBy: state.activeSleep.createdBy||null, createdByRole: state.activeSleep.createdByRole||null };
   state.sleeps.push(rec);
   state.activeSleep = null;
   stopSleepTicker();
@@ -1032,7 +1144,7 @@ async function handleWakeUp(fromSheet){
   renderMain();
   showUndoToast(`✓ Sleep logged · ${fmtDuration(result.rec.mins)}`, async ()=>{
     state.sleeps = state.sleeps.filter(x=>x.id!==result.rec.id);
-    state.activeSleep = { id: result.rec.id, startAt: result.startISO };
+    state.activeSleep = { id: result.rec.id, startAt: result.startISO, createdBy: result.rec.createdBy, createdByRole: result.rec.createdByRole };
     startSleepTicker();
     await saveKey('sleep', state.sleeps);
     renderMain();
@@ -1166,7 +1278,7 @@ function showUndoToast(msg, restoreFn){
   clearTimeout(window._toastTimer);
   const btn = document.getElementById('undoBtn');
   if(btn) btn.addEventListener('click', async ()=>{ t.classList.remove('show'); await restoreFn(); });
-  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 4500);
+  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 9000);
 }
 
 /* ---------------- Percentile logic ---------------- */
@@ -1562,6 +1674,24 @@ function setupFabScrollHide(){
     lastScrollY = y;
   }, { passive:true });
 }
+/* One shared, context-aware Back control used by every secondary screen,
+   plus one delegated listener attached to the never-replaced #app root —
+   this is deliberately not re-attached per render (the exact brittleness
+   spec called out), so it can never go stale after a re-render swaps out
+   the buttons underneath it. */
+function backButton(fallbackLabel){
+  const label = navStack.length ? (VIEW_LABEL[navStack[navStack.length-1].view] || 'Back') : (fallbackLabel || 'Home');
+  return `<button class="app-back" data-navback="1" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}${escapeHtml(label)}</button>`;
+}
+let backDelegationAttached = false;
+function setupBackDelegation(){
+  if(backDelegationAttached) return;
+  backDelegationAttached = true;
+  document.getElementById('app').addEventListener('click', (e)=>{
+    const btn = e.target.closest('[data-navback]');
+    if(btn) handleBackTap();
+  });
+}
 function render(){
   const app = document.getElementById('app');
   if(!authReady){ app.innerHTML = renderLoadingScreen(); return; }
@@ -1593,13 +1723,14 @@ function render(){
     <div class="toast" id="toast"></div>
   `;
   document.querySelectorAll('nav.bottom button[data-view]').forEach(b=>{
-    b.addEventListener('click', ()=>{ sheetOpen=false; currentView=b.dataset.view; render(); });
+    b.addEventListener('click', ()=>{ sheetOpen=false; switchRootView(b.dataset.view); });
   });
   document.getElementById('fabAdd').addEventListener('click', ()=> openSheet(currentView==='milestones' ? 'moment' : 'menu'));
   const setb = document.getElementById('settingsBtn');
-  if(setb) setb.addEventListener('click', ()=>{ currentView='settings'; render(); });
+  if(setb) setb.addEventListener('click', ()=> navigateTo('settings'));
   document.getElementById('sheetOverlay').addEventListener('click', (e)=>{ if(e.target.id==='sheetOverlay') closeSheet(); });
   setupFabScrollHide();
+  setupBackDelegation();
   renderMain();
 }
 function renderMain(){
@@ -1620,6 +1751,23 @@ function renderMain(){
   else if(currentView==='photobookpreview') { main.innerHTML = renderPhotoBookPreview(); bindPhotoBookPreview(); }
   else if(currentView==='ask') { main.innerHTML = renderAskView(); bindAskView(); }
   if(sheetOpen) renderSheet();
+  makeClickablesKeyboardAccessible();
+}
+/* Many interactive rows/cards throughout the app are <div>s with a click
+   listener (via style="cursor:pointer") rather than real <button> elements,
+   which by default are invisible to keyboard/switch-control navigation. This
+   retroactively gives every such element a tab stop, a button role, and
+   Enter/Space activation — covering current and future instances alike,
+   rather than needing tabindex/role/keydown added at dozens of call sites. */
+function makeClickablesKeyboardAccessible(){
+  document.querySelectorAll('main [style*="cursor:pointer"], .sheet [style*="cursor:pointer"], .moment-viewer-overlay [style*="cursor:pointer"]').forEach(el=>{
+    if(el.tagName==='BUTTON' || el.tagName==='A' || el.hasAttribute('tabindex')) return;
+    el.setAttribute('tabindex','0');
+    if(!el.hasAttribute('role')) el.setAttribute('role','button');
+    el.addEventListener('keydown', function(e){
+      if(e.key==='Enter' || e.key===' '){ e.preventDefault(); el.click(); }
+    });
+  });
 }
 let sheetPumpForced = false;
 let sheetDetailKind = null, sheetDetailId = null;
@@ -1663,7 +1811,8 @@ function renderMomentViewer(){
       <div style="font-size:12.5px;opacity:0.75;margin-top:4px;">${fmtDateFull(m.date)} · ${momentAgeLabel(m.date)}${m.location?' · '+escapeHtml(m.location):''}</div>
       ${tags.length ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">${tags.map(t=>`<span style="font-size:10.5px;font-weight:700;background:rgba(255,255,255,0.15);padding:3px 9px;border-radius:99px;">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
       ${m.note ? `<div style="font-size:13px;opacity:0.9;margin-top:10px;line-height:1.5;">${escapeHtml(m.note)}</div>` : ''}
-      ${photos.some(isLowResPhoto) ? `<div style="font-size:10.5px;opacity:0.55;margin-top:8px;">Lower-resolution image</div>` : ''}
+      ${m.createdByRole ? `<div style="font-size:10.5px;opacity:0.6;margin-top:8px;">Logged by ${escapeHtml(m.createdByRole)}</div>` : ''}
+      ${photos.some(isLowResPhoto) ? `<div style="font-size:10.5px;opacity:0.55;margin-top:4px;">Lower-resolution image</div>` : ''}
     </div>
   `;
 }
@@ -1675,6 +1824,7 @@ function openMomentViewer(id){
   overlay.classList.add('open');
   overlay.innerHTML = renderMomentViewer();
   bindMomentViewer();
+  makeClickablesKeyboardAccessible();
 }
 function closeMomentViewer(){
   viewingMomentId = null;
@@ -1782,7 +1932,10 @@ async function deleteEntryWithUndo(kind, id){
   await saveKey(m.key, state[m.arr]);
   closeSheet(); renderMain();
   showUndoToast('Deleted', async ()=>{
-    state[m.arr].splice(idx,0,removed);
+    /* Guard against a record that's already back (e.g. a slower sync path
+       already restored it) — never insert a second copy of the same id. */
+    if(state[m.arr].some(x=>x.id===removed.id)) { renderMain(); return; }
+    state[m.arr].push(removed);
     await saveKey(m.key, state[m.arr]);
     renderMain();
   });
@@ -1857,6 +2010,7 @@ function renderSheet(){
     overlay.classList.add('open');
     panel.innerHTML = `<div class="sheet-handle"></div>` + renderSheetContent();
     bindSheet();
+    makeClickablesKeyboardAccessible();
   } else {
     overlay.classList.remove('open');
   }
@@ -1913,8 +2067,9 @@ function renderDetailSheet(){
   const item = m ? state[m.arr].find(x=>x.id===sheetDetailId) : null;
   if(!item) return `<div class="sheet-title">Details</div><div class="empty">This entry was removed.</div>`;
   let title='', lines=[];
-  if(sheetDetailKind==='feed'){ const nf=normalizeFeed(item); title='Feed'; lines=[feedSummaryLine(item), fmtDateTime(nf.date), item.note]; }
-  else if(sheetDetailKind==='nappy'){ title='Nappy'; lines=[item.type==='wet'?'Wet':item.type==='poo'?'Poo':'Wet + poo', fmtDateTime(item.date), item.note]; }
+  const loggedByLine = item.createdByRole ? 'Logged by '+item.createdByRole : null;
+  if(sheetDetailKind==='feed'){ const nf=normalizeFeed(item); title='Feed'; lines=[feedSummaryLine(item), fmtDateTime(nf.date), item.note, loggedByLine]; }
+  else if(sheetDetailKind==='nappy'){ title='Nappy'; lines=[item.type==='wet'?'Wet':item.type==='poo'?'Poo':'Wet + poo', fmtDateTime(item.date), item.note, loggedByLine]; }
   else if(sheetDetailKind==='sleep'){
     title='Sleep';
     const crossesDay = item.endAt && sydDateKey(item.date)!==sydDateKey(item.endAt);
@@ -1933,13 +2088,14 @@ function renderDetailSheet(){
     } else {
       lines=[`${item.label==='nap'?'Nap':'Night sleep'} · ${fmtDuration(item.mins)}`, `${fmtTime(item.date)} – ${fmtTime(item.endAt)} · ${fmtDate(item.date)}`, item.note];
     }
+    lines.push(loggedByLine);
   }
-  else if(sheetDetailKind==='measurement'){ title=labelType(item.type); lines=[`${item.value}${unitFor(item.type)}`, fmtDateTime(item.date), item.note, item.createdByRole?'Logged by '+item.createdByRole:null]; }
+  else if(sheetDetailKind==='measurement'){ title=labelType(item.type); lines=[`${item.value}${unitFor(item.type)}`, fmtDateTime(item.date), item.note, loggedByLine]; }
   else if(sheetDetailKind==='vaccine'){ title=item.name; lines=[item.dose, item.givenDate?`Given ${fmtDate(item.givenDate)}`:'Not yet given', item.provider?('Provider: '+item.provider):null]; }
-  else if(sheetDetailKind==='appointment'){ title=item.title; lines=[fmtDateFull(item.date), item.note, item.createdByRole?'Logged by '+item.createdByRole:null]; }
-  else if(sheetDetailKind==='temperature'){ title='Temperature'; lines=[`${item.tempC}°C · ${item.method}`, fmtDateTime(item.date), item.note]; }
-  else if(sheetDetailKind==='healthRecord'){ title=item.title; lines=[fmtDateTime(item.date), item.details, item.createdByRole?'Logged by '+item.createdByRole:null]; }
-  else if(sheetDetailKind==='milestone'){ title=item.title; lines=[`${fmtDate(item.date)} · ${momentAgeLabel(item.date)}`, item.note]; }
+  else if(sheetDetailKind==='appointment'){ title=item.title; lines=[fmtDateFull(item.date), item.note, loggedByLine]; }
+  else if(sheetDetailKind==='temperature'){ title='Temperature'; lines=[`${item.tempC}°C · ${item.method}`, fmtDateTime(item.date), item.note, loggedByLine]; }
+  else if(sheetDetailKind==='healthRecord'){ title=item.title; lines=[fmtDateTime(item.date), item.details, loggedByLine]; }
+  else if(sheetDetailKind==='milestone'){ title=item.title; lines=[`${fmtDate(item.date)} · ${momentAgeLabel(item.date)}`, item.note, loggedByLine]; }
   lines = lines.filter(Boolean);
   const canEdit = !!KIND_TO_STEP[sheetDetailKind];
   return `
@@ -2291,7 +2447,7 @@ function bindSheet(){
     if(editingKind==='nappy' && editingId){
       updateEntry('nappy', editingId, {type:currentNappyType, date:new Date(date).toISOString(), note});
     } else {
-      state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note});
+      state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note, ...attributionFields()});
     }
     await saveKey('nappies', state.nappies);
     await flashButtonSuccess('saveNappyDetailed', '✓ Logged'); closeSheet(); renderMain();
@@ -2338,7 +2494,7 @@ function bindSheet(){
     if(editingKind==='feed' && editingId){
       updateEntry('feed', editingId, patch);
     } else {
-      state.feeds.push(Object.assign({id:uid()}, patch));
+      state.feeds.push(Object.assign({id:uid()}, patch, attributionFields()));
     }
     await saveKey('feeds', state.feeds);
     await flashButtonSuccess('qlSaveFeed', '✓ Logged'); closeSheet(); renderMain();
@@ -2395,7 +2551,7 @@ function bindSheet(){
     if(editingKind==='sleep' && editingId){
       updateEntry('sleep', editingId, {date:startISO, endAt:endISO, label:currentSleepType, mins, note});
     } else {
-      state.sleeps.push({id:uid(), date:startISO, endAt:endISO, label:currentSleepType, mins, note, source:'manual'});
+      state.sleeps.push({id:uid(), date:startISO, endAt:endISO, label:currentSleepType, mins, note, source:'manual', ...attributionFields()});
     }
     await saveKey('sleep', state.sleeps);
     await flashButtonSuccess('qlSaveSleep', '✓ Logged'); closeSheet(); renderMain();
@@ -2543,7 +2699,7 @@ function bindSheet(){
       updateEntry('milestone', editingId, patch);
     } else {
       newMomentId = uid();
-      state.milestones.push({id:newMomentId, includeInBook:true, ...patch});
+      state.milestones.push({id:newMomentId, includeInBook:true, ...patch, ...attributionFields()});
     }
     await saveKey('milestones', state.milestones);
     if(pendingMilestoneLinkId && newMomentId){
@@ -2563,7 +2719,7 @@ function bindSheet(){
     if(editingKind==='milestone' && editingId){
       updateEntry('milestone', editingId, {date:new Date(date).toISOString(), note:text, author});
     } else {
-      state.milestones.push({id:uid(), kind:'letter', title:`A letter from ${author}`, date:new Date(date).toISOString(), note:text, author, includeInBook:true, photos:[]});
+      state.milestones.push({id:uid(), kind:'letter', title:`A letter from ${author}`, date:new Date(date).toISOString(), note:text, author, includeInBook:true, photos:[], ...attributionFields()});
     }
     await saveKey('milestones', state.milestones);
     await flashButtonSuccess('qlSaveLetter', '✓ Saved'); closeSheet(); renderMain();
@@ -2910,21 +3066,21 @@ function bindHome(){
     });
   });
   const gtl = document.getElementById('goTimelineLink');
-  if(gtl) gtl.addEventListener('click', ()=>{ currentView='timeline'; render(); });
+  if(gtl) gtl.addEventListener('click', ()=> navigateTo('timeline'));
   const ggl = document.getElementById('goGrowthLink');
-  if(ggl) ggl.addEventListener('click', ()=>{ currentView='growth'; render(); });
+  if(ggl) ggl.addEventListener('click', ()=> switchRootView('growth'));
   const gcl = document.getElementById('careRowLink');
-  if(gcl) gcl.addEventListener('click', ()=>{ currentView='care'; render(); });
+  if(gcl) gcl.addEventListener('click', ()=> switchRootView('care'));
   const hwb = document.getElementById('homeWakeUpBtn');
   if(hwb) hwb.addEventListener('click', async ()=>{ hwb.disabled = true; await handleWakeUp(false); });
   const hesb = document.getElementById('homeEditSleepStartBtn');
   if(hesb) hesb.addEventListener('click', ()=> openEditSleepStart());
   const hic = document.getElementById('homeInsightCard');
-  if(hic) hic.addEventListener('click', ()=>{ currentView='care'; render(); });
+  if(hic) hic.addEventListener('click', ()=> switchRootView('care'));
   const gal = document.getElementById('goAskLink');
-  if(gal) gal.addEventListener('click', ()=>{ currentView='ask'; render(); });
+  if(gal) gal.addEventListener('click', ()=> navigateTo('ask'));
   const hdr = document.getElementById('homeDevRow');
-  if(hdr) hdr.addEventListener('click', ()=>{ currentView='care'; careSubView='devplay'; render(); });
+  if(hdr) hdr.addEventListener('click', ()=>{ switchRootView('care'); careSubView='devplay'; renderMain(); });
 }
 
 /* ---------------- Add (unified quick-log hub) ---------------- */
@@ -3104,7 +3260,7 @@ function bindAdd(){
       const date = document.getElementById('feedDate').value;
       if(!date){ toast('Pick a time'); return; }
       const note = document.getElementById('feedNote').value.trim();
-      let entry = {id:uid(), type:currentFeedSubtype, date:new Date(date).toISOString(), note};
+      let entry = {id:uid(), type:currentFeedSubtype, date:new Date(date).toISOString(), note, ...attributionFields()};
       if(currentFeedSubtype==='breastfeeding'){
         const left = parseFloat(document.getElementById('feedLeft').value)||0;
         const right = parseFloat(document.getElementById('feedRight').value)||0;
@@ -3136,7 +3292,7 @@ function bindAdd(){
       const date = document.getElementById('nappyDate').value;
       if(!date){ toast('Pick a time'); return; }
       const note = document.getElementById('nappyNote').value.trim();
-      state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note});
+      state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note, ...attributionFields()});
       await saveKey('nappies', state.nappies);
       toast('Nappy logged 🧷'); currentView='home'; render();
     });
@@ -3148,7 +3304,7 @@ function bindAdd(){
       const mins = parseInt(document.getElementById('sleepMins').value);
       const date = document.getElementById('sleepDate').value;
       if(!mins || !date){ toast('Enter duration and time'); return; }
-      state.sleeps.push({id:uid(), date:new Date(date).toISOString(), label:currentSleepType, mins});
+      state.sleeps.push({id:uid(), date:new Date(date).toISOString(), label:currentSleepType, mins, ...attributionFields()});
       await saveKey('sleep', state.sleeps);
       toast('Sleep logged 😴'); currentView='home'; render();
     });
@@ -3200,7 +3356,7 @@ function bindAdd(){
         try{ photos = [await processMomentPhotoFile(fileInput.files[0])]; }
         catch(e){ console.error('photo processing failed', e); toast('Could not process photo — saved without it'); }
       }
-      state.milestones.push({id:uid(), kind:'moment', title, date:new Date(date).toISOString(), note, photos, primaryPhotoId: photos[0]?photos[0].id:null, includeInBook:true});
+      state.milestones.push({id:uid(), kind:'moment', title, date:new Date(date).toISOString(), note, photos, primaryPhotoId: photos[0]?photos[0].id:null, includeInBook:true, ...attributionFields()});
       await saveKey('milestones', state.milestones);
       toast('Moment saved ⭐'); currentView='home'; render();
     });
@@ -3663,6 +3819,34 @@ function insightMilestoneSleep(){
     evidence: { current:[{label:'New longest', value:fmtDuration(last.mins)}], comparison:[{label:'Previous longest', value:fmtDuration(priorMax)}] }
   });
 }
+/* --- A recently captured personal First or observed developmental milestone
+   surfaces here too, not just inside the dedicated Milestones & Firsts
+   screen — reusing the exact same underlying records, never duplicated. --- */
+function insightRecentFirst(){
+  const cutoff = Date.now()-48*3600000;
+  const firsts = state.milestones.filter(m=> m.milestoneTag && new Date(m.date).getTime()>=cutoff).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const observed = state.milestoneObservations.filter(o=> new Date(o.observedDate).getTime()>=cutoff).sort((a,b)=>new Date(b.observedDate)-new Date(a.observedDate));
+  if(firsts.length){
+    const f = firsts[0];
+    return mkInsight({
+      id:'recent-first-'+f.id, type:'milestone', domain:'moments',
+      title: f.milestoneTag,
+      body: `Captured ${timeAgo(f.date)} as a Moment — "${f.title}".`,
+      importance: 55, evidence: null
+    });
+  }
+  if(observed.length){
+    const o = observed[0];
+    const cat = MILESTONE_CATALOGUE.find(m=>m.id===o.milestoneId);
+    if(cat) return mkInsight({
+      id:'recent-milestone-'+o.id, type:'milestone', domain:'development',
+      title: cat.title,
+      body: `Observed ${timeAgo(o.observedDate)} — a ${cat.category.toLowerCase()} milestone typical around ${cat.ageStage}.`,
+      importance: 52, evidence: null
+    });
+  }
+  return null;
+}
 /* --- Today deviations from her personal baseline, reusing the existing baseline system --- */
 function todayDeviationCandidates(){
   const result = generateBaselineInsights();
@@ -3681,7 +3865,7 @@ function generateSmartInsights(){
   const candidates = [
     insightChangeSleepStretch(), insightChangeFeedFrequency(), insightConsistencyNappy(),
     insightRhythmSleepTiming(), insightPatternEveningFeeds(), insightRelationshipFeedSleep(),
-    insightMilestoneSleep(), ...todayDeviationCandidates()
+    insightMilestoneSleep(), insightRecentFirst(), ...todayDeviationCandidates()
   ].filter(Boolean);
   candidates.sort((a,b)=>b.importance-a.importance);
   let top = candidates.slice(0,4);
@@ -4748,7 +4932,7 @@ function resolveAskClarify(domain){
 function renderAskView(){
   return `
     <div class="hero">
-      <button id="askBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
+      ${backButton('Home')}
       <h1>Ask ${escapeHtml(state.profile.name)}</h1><p>Ask a question about her logged history.</p>
     </div>
     <input type="text" id="askInput" placeholder="e.g. How much sleep today?" value="${escapeHtml(askQuestion)}">
@@ -4788,8 +4972,6 @@ function renderAskView(){
   `;
 }
 function bindAskView(){
-  const back = document.getElementById('askBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
   const input = document.getElementById('askInput');
   const submitBtn = document.getElementById('askSubmitBtn');
   const submit = ()=>{ if(input) handleAskSubmit(input.value); };
@@ -5162,6 +5344,32 @@ function shiftDayKey(dayKey, delta){ return sydDateKey(sydMidnightUTC(dayKey) + 
    getDailyNappyStats, effectiveSleepRecords/sleepBounds for the calendar-
    overlap clipping) so its numbers can never drift from Home/Care/7-Day
    Summary/Ask Keshavi for the same date. */
+let expandedRhythmCluster = null;
+function clusterRhythmMarkers(items, minGapPx){
+  const sorted = items.slice().sort((a,b)=>a.top-b.top);
+  const clusters = [];
+  sorted.forEach(it=>{
+    const last = clusters[clusters.length-1];
+    if(last && (it.top - last.items[last.items.length-1].top) < minGapPx) last.items.push(it);
+    else clusters.push({ top: it.top, items:[it] });
+  });
+  return clusters;
+}
+function renderMarkerLane(items, laneLeft, defaultColor, laneKey){
+  const clusters = clusterRhythmMarkers(items, 16);
+  return clusters.map((c,ci)=>{
+    const clusterId = laneKey+'-'+ci;
+    if(c.items.length===1){
+      const it = c.items[0];
+      return `<div class="rhythm-marker" data-tlitem="${it.kind}:${it.id}" style="left:${laneLeft}px;top:${c.top.toFixed(0)}px;"><span class="rhythm-dot" style="background:${it.color||defaultColor};"></span><span class="rhythm-marker-time">${it.timeLabel}</span></div>`;
+    }
+    const isExpanded = expandedRhythmCluster===clusterId;
+    return `
+      <div class="rhythm-cluster" data-rhcluster="${clusterId}" style="left:${laneLeft}px;top:${c.top.toFixed(0)}px;"><span class="rhythm-dot" style="background:${defaultColor};"></span><span class="rhythm-marker-time">${c.items.length}</span></div>
+      ${isExpanded ? `<div class="rhythm-cluster-expand" style="left:${laneLeft}px;top:${(c.top+16).toFixed(0)}px;">${c.items.map(it=>`<div class="rhythm-marker" data-tlitem="${it.kind}:${it.id}"><span class="rhythm-dot" style="background:${it.color||defaultColor};"></span><span class="rhythm-marker-time">${it.timeLabel}</span></div>`).join('')}</div>` : ''}
+    `;
+  }).join('');
+}
 function renderRhythmBody(dayKeyArg){
   const dayKey = dayKeyArg || sydDateKey();
   const todayKey = sydDateKey();
@@ -5170,6 +5378,7 @@ function renderRhythmBody(dayKeyArg){
   const PX_PER_MIN = 0.45;
   const totalHeight = Math.round(1440*PX_PER_MIN);
   const minutesFromMidnight = ms => (ms-dayStart)/60000;
+  const dark = isDarkMode();
 
   const sleepBlocks = effectiveSleepRecords().map(s=>{
     const {start,end} = sleepBounds(s);
@@ -5186,31 +5395,38 @@ function renderRhythmBody(dayKeyArg){
   const nappyStatsForDay = getDailyNappyStats(new Date(dayKey+'T12:00:00'));
   const dateLabel = new Date(dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ});
 
-  let hourLines = '';
+  const LANE_SLEEP_L = 34, LANE_SLEEP_W = 64, LANE_FEED_L = 106, LANE_NAPPY_L = 208;
+  const feedColor = dark?'#F2A796':'#EC9384', nappyWetColor='#5FA8D3', nappyDirtyColor = dark?'#D9A15C':'#B8823A', tempColor='var(--status-critical-fg)';
+
+  let hourLines = '', hourLabels = '';
   for(let h=0; h<24; h++){
     const top = h*60*PX_PER_MIN;
     const major = h%3===0;
-    hourLines += `<div style="position:absolute;left:0;right:0;top:${top}px;border-top:1px solid var(--line);opacity:${major?0.9:0.35};"></div>`;
+    hourLines += `<div class="rhythm-gridline" style="top:${top}px;opacity:${major?0.9:0.35};"></div>`;
     if(major){
-      const label = h===0?'12am':h<12?h+'am':h===12?'12pm':(h-12)+'pm';
-      hourLines += `<div style="position:absolute;left:0;top:${(top-6).toFixed(0)}px;font-size:9px;color:var(--ink-tertiary);width:34px;">${label}</div>`;
+      const label = h===0?'12a':h<12?h+'a':h===12?'12p':(h-12)+'p';
+      hourLabels += `<div class="rhythm-hour-label" style="top:${(top-6).toFixed(0)}px;">${label}</div>`;
     }
   }
   const sleepHtml = sleepBlocks.map(b=>{
     const top = minutesFromMidnight(b.clipStart)*PX_PER_MIN;
-    const height = Math.max(4, (minutesFromMidnight(b.clipEnd)-minutesFromMidnight(b.clipStart))*PX_PER_MIN);
-    return `<div data-tlitem="sleep:${b.s.id}" style="position:absolute;left:40px;right:6px;top:${top.toFixed(0)}px;height:${height.toFixed(0)}px;background:${b.s.label==='nap'?'rgba(183,159,209,.38)':'rgba(142,111,176,.5)'};border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;color:var(--ink);overflow:hidden;cursor:pointer;">😴 ${fmtDuration(minutesFromMidnight(b.clipEnd)-minutesFromMidnight(b.clipStart))}${b.startedBefore?' · started prev. day':''}${b.continuesAfter?' · continues next day':''}</div>`;
+    const height = Math.max(5, (minutesFromMidnight(b.clipEnd)-minutesFromMidnight(b.clipStart))*PX_PER_MIN);
+    return `<div data-tlitem="sleep:${b.s.id}" class="rhythm-sleep-block" style="left:${LANE_SLEEP_L}px;width:${LANE_SLEEP_W}px;top:${top.toFixed(0)}px;height:${height.toFixed(0)}px;background:${b.s.label==='nap'?'rgba(183,159,209,.32)':'rgba(142,111,176,.42)'};">
+      ${height>=22 ? `<span class="rhythm-sleep-icon">😴</span>` : ''}
+      ${(b.startedBefore||b.continuesAfter) && height>=36 ? `<span class="rhythm-sleep-flag">${b.startedBefore?'↑':''}${b.continuesAfter?'↓':''}</span>` : ''}
+    </div>`;
   }).join('');
-  let markers = [];
-  feeds.forEach(f=> markers.push({ms:new Date(f.date).getTime(), kind:'feed', id:f.id, color:isDarkMode()?'#F2A796':'#EC9384', label:`${fmtTime(f.date)} · ${feedSummaryLine(f).replace(/^🍼\s*/,'')}`}));
-  nappies.forEach(n=> markers.push({ms:new Date(n.date).getTime(), kind:'nappy', id:n.id, color:'#5FA8D3', label:`${fmtTime(n.date)} · ${n.type==='wet'?'Wet':n.type==='poo'?'Poo':'Wet+poo'} nappy`}));
-  temps.forEach(t=> markers.push({ms:new Date(t.date).getTime(), kind:'temperature', id:t.id, color:'var(--status-critical-fg)', label:`${fmtTime(t.date)} · ${t.tempC}°C`}));
-  markers.sort((a,b)=>a.ms-b.ms);
-  const markerHtml = markers.map(m=>{
-    const top = minutesFromMidnight(m.ms)*PX_PER_MIN;
-    return `<div class="rhythm-row" data-tlitem="${m.kind}:${m.id}" style="position:absolute;left:40px;top:${top.toFixed(0)}px;"><span class="rhythm-dot" style="background:${m.color};"></span>${m.label}</div>`;
-  }).join('');
-  const nowLine = isToday ? `<div style="position:absolute;left:0;right:0;top:${(minutesFromMidnight(Date.now())*PX_PER_MIN).toFixed(0)}px;border-top:2px solid var(--lavender-deep);"><span style="position:absolute;left:-3px;top:-4px;width:8px;height:8px;border-radius:50%;background:var(--lavender-deep);"></span></div>` : '';
+  const feedItems = feeds.map(f=>({ kind:'feed', id:f.id, color:feedColor, timeLabel:fmtTime(f.date), top: minutesFromMidnight(new Date(f.date).getTime())*PX_PER_MIN }));
+  const nappyItems = nappies.map(n=>({ kind:'nappy', id:n.id, color:n.type==='poo'?nappyDirtyColor:nappyWetColor, timeLabel:fmtTime(n.date), top: minutesFromMidnight(new Date(n.date).getTime())*PX_PER_MIN }));
+  const tempItems = temps.map(t=>({ kind:'temperature', id:t.id, color:tempColor, timeLabel:`${t.tempC}°`, top: minutesFromMidnight(new Date(t.date).getTime())*PX_PER_MIN }));
+  const feedHtml = renderMarkerLane(feedItems, LANE_FEED_L, feedColor, 'feed');
+  const nappyHtml = renderMarkerLane([...nappyItems, ...tempItems], LANE_NAPPY_L, nappyWetColor, 'nappy');
+  const nowLine = isToday ? `<div class="rhythm-now-line" style="top:${(minutesFromMidnight(Date.now())*PX_PER_MIN).toFixed(0)}px;"><span class="rhythm-now-dot"></span></div>` : '';
+  const laneHeads = hasAny ? `
+    <div class="rhythm-lane-head" style="left:${LANE_SLEEP_L}px;">Sleep</div>
+    <div class="rhythm-lane-head" style="left:${LANE_FEED_L}px;">Feed</div>
+    <div class="rhythm-lane-head" style="left:${LANE_NAPPY_L}px;">Nappy</div>
+  ` : '';
 
   return `
     <div style="display:flex;align-items:center;justify-content:space-between;">
@@ -5231,8 +5447,8 @@ function renderRhythmBody(dayKeyArg){
       <div class="stat-cell"><div class="stat-val">${nappyStatsForDay.wet}💧 ${nappyStatsForDay.dirty}💩</div><div class="stat-lbl">Nappies</div></div>
     </div>
     ${hasAny ? `
-    <div style="position:relative;height:${totalHeight}px;margin-top:10px;">
-      ${hourLines}${sleepHtml}${markerHtml}${nowLine}
+    <div class="rhythm-lanes" style="height:${totalHeight}px;margin-top:26px;overflow-x:auto;">
+      ${hourLines}${hourLabels}${laneHeads}${sleepHtml}${feedHtml}${nappyHtml}${nowLine}
     </div>` : `<div class="empty" style="margin-top:10px;">No activity logged for this day.</div>`}
     <button class="ql-link" id="goTimelineFromRhythm" style="padding:10px 0 0;">Open chronological timeline →</button>
   `;
@@ -5240,30 +5456,46 @@ function renderRhythmBody(dayKeyArg){
 function bindRhythmBody(){
   document.querySelectorAll('[data-rhprev]').forEach(b=> b.addEventListener('click', ()=>{
     const k = shiftDayKey(rhythmDateKey||sydDateKey(), -1);
-    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
+    rhythmDateKey = k===sydDateKey() ? null : k; expandedRhythmCluster=null; renderMain();
   }));
   document.querySelectorAll('[data-rhnext]').forEach(b=> b.addEventListener('click', ()=>{
     const k = shiftDayKey(rhythmDateKey||sydDateKey(), 1);
     if(k>sydDateKey()) return;
-    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
+    rhythmDateKey = k===sydDateKey() ? null : k; expandedRhythmCluster=null; renderMain();
   }));
-  document.querySelectorAll('[data-rhtoday]').forEach(b=> b.addEventListener('click', ()=>{ rhythmDateKey=null; renderMain(); }));
+  document.querySelectorAll('[data-rhtoday]').forEach(b=> b.addEventListener('click', ()=>{ rhythmDateKey=null; expandedRhythmCluster=null; renderMain(); }));
   const picker = document.getElementById('rhythmDatePicker');
   const dateBtn = document.getElementById('rhythmDateBtn');
   if(dateBtn && picker) dateBtn.addEventListener('click', ()=>{ if(picker.showPicker) picker.showPicker(); else picker.click(); });
-  if(picker) picker.addEventListener('change', ()=>{ rhythmDateKey = picker.value===sydDateKey() ? null : picker.value; renderMain(); });
+  if(picker) picker.addEventListener('change', ()=>{ rhythmDateKey = picker.value===sydDateKey() ? null : picker.value; expandedRhythmCluster=null; renderMain(); });
+  document.querySelectorAll('[data-rhcluster]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.dataset.rhcluster;
+      expandedRhythmCluster = expandedRhythmCluster===id ? null : id;
+      renderMain();
+    });
+  });
   document.querySelectorAll('[data-tlitem]').forEach(row=>{
     row.addEventListener('click', ()=>{ const [kind,id]=row.dataset.tlitem.split(':'); openDetailSheet(kind,id); });
   });
   const gtfr = document.getElementById('goTimelineFromRhythm');
-  if(gtfr) gtfr.addEventListener('click', ()=>{ currentView='timeline'; render(); });
+  if(gtfr) gtfr.addEventListener('click', ()=> navigateTo('timeline'));
 }
-function openRhythmDay(dayKey){
-  rhythmDateKey = dayKey===sydDateKey() ? null : dayKey;
-  careSubView = null;
-  currentView = 'care';
-  render();
+/* The single reusable entry point for "show me this date's Daily Rhythm" —
+   used by the 7-Day Summary's "View day", and available for Daily Brief or
+   any future caller, so date-opening behaviour is never reimplemented per
+   component. Since Daily Rhythm already lives inline in Care, this updates
+   the selected date in place and scrolls to it rather than navigating to a
+   separate duplicate page — but still pushes navigation state so Back
+   correctly restores whatever date/context was showing before. */
+function openDailyRhythm(dayKey){
+  navigateTo('care', { rhythmDateKey: dayKey===sydDateKey() ? null : dayKey });
+  requestAnimationFrame(()=>{
+    const el = document.getElementById('dailyRhythmCard');
+    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
+  });
 }
+function openRhythmDay(dayKey){ openDailyRhythm(dayKey); }
 /* ---------------- Smart Daily Brief: rolling last-24h view, distinct from "today" calendar totals ---------------- */
 function computeDailyBrief(){
   const cutoff = Date.now()-24*3600000;
@@ -5291,7 +5523,7 @@ function renderDailyBrief(){
   const recentCutoff = Date.now()-24*3600000;
   return `
     <div class="hero">
-      <button id="briefBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Care</button>
+      ${backButton('Care')}
       <h1>Daily Brief</h1><p>The last 24 hours, at a glance.</p>
     </div>
     <div class="card">
@@ -5331,8 +5563,6 @@ function renderDailyBrief(){
   `;
 }
 function bindDailyBrief(){
-  const back = document.getElementById('briefBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='care'; render(); });
 }
 /* ---------------- Monthly Recap: a factual journal entry per calendar month,
    bridging the clinical (growth, care, health) and the emotional (Moments) —
@@ -5448,7 +5678,7 @@ function renderMonthlyRecap(){
 
   return `
     <div class="hero">
-      <button id="recapBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Care</button>
+      ${backButton('Care')}
       <h1>${monthLabel(ym)}</h1>
       <p>${ageNote || `${escapeHtml(state.profile.name)}'s month in review`}${isCurrentMonth?' · still in progress':''}</p>
     </div>
@@ -5505,8 +5735,6 @@ function renderMonthlyRecap(){
   `;
 }
 function bindMonthlyRecap(){
-  const back = document.getElementById('recapBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='care'; render(); });
   const prevBtn = document.getElementById('recapPrevBtn');
   if(prevBtn) prevBtn.addEventListener('click', ()=>{ recapYearMonth = shiftYearMonth(recapYearMonth||currentYearMonth(), -1); renderMain(); });
   const nextBtn = document.getElementById('recapNextBtn');
@@ -5526,7 +5754,7 @@ function renderCareOverview(){
   const baselineForToday = baselineResult.insufficient ? null : baselineResult.baseline;
   return `
     <div class="hero">
-      <button id="careBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
+      ${backButton('Home')}
       <h1>Care</h1><p>Feeding, sleep, and nappy trends.</p>
     </div>
 
@@ -5538,7 +5766,7 @@ function renderCareOverview(){
       <div class="rline">Growth: ${ds.growthToday.length ? ds.growthToday.map(m=>`${labelType(m.type)} ${m.value}${unitFor(m.type)}`).join(', ') : 'No measurement today'}</div>
     </div>
 
-    <div class="card">
+    <div class="card" id="dailyRhythmCard">
       <h2>Daily Rhythm</h2>
       ${renderRhythmBody(rhythmDateKey)}
     </div>
@@ -5626,7 +5854,7 @@ function renderCareSleep(){
         const crossesDay = s.endAt && sydDateKey(s.date)!==sydDateKey(s.endAt);
         return `
         <div class="row-item">
-          <div><div class="main">${s.label==='nap'?'☀️ Nap':'🌙 Night sleep'} · ${fmtDuration(s.mins)}</div><div class="sub">${fmtDateTime(s.date)}${crossesDay?' → next day':''}</div></div>
+          <div><div class="main">${s.label==='nap'?'☀️ Nap':'🌙 Night sleep'} · ${fmtDuration(s.mins)}</div><div class="sub">${fmtDateTime(s.date)}${crossesDay?' → next day':''}${s.createdByRole?' · Logged by '+escapeHtml(s.createdByRole):''}</div></div>
           <button class="del" data-id="${s.id}" data-kind="sleep">•••</button>
         </div>`; }).join('') : `<div class="empty">No sleep logged yet.<br>Tap ＋ to start a timer or log manually.</div>`}
     </div>
@@ -5648,7 +5876,7 @@ function renderCareNappies(){
       <h2>History</h2>
       ${nappies.length ? nappies.map(n=>`
         <div class="row-item">
-          <div><div class="main">${n.type==='wet'?'💧 Wet':n.type==='poo'?'💩 Poo':'💧💩 Both'}</div><div class="sub">${fmtDateTime(n.date)}${n.note?' · '+escapeHtml(n.note):''}</div></div>
+          <div><div class="main">${n.type==='wet'?'💧 Wet':n.type==='poo'?'💩 Poo':'💧💩 Both'}</div><div class="sub">${fmtDateTime(n.date)}${n.note?' · '+escapeHtml(n.note):''}${n.createdByRole?' · Logged by '+escapeHtml(n.createdByRole):''}</div></div>
           <button class="del" data-id="${n.id}" data-kind="nappy">•••</button>
         </div>`).join('') : `<div class="empty">No nappies logged yet.</div>`}
     </div>
@@ -5814,8 +6042,6 @@ function renderDevMilestonesDetail(){
   `;
 }
 function bindCare(){
-  const back = document.getElementById('careBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
   document.querySelectorAll('.careBack2').forEach(b=>{
     b.addEventListener('click', ()=>{
       careSubView = (careSubView==='devtummy'||careSubView==='devplay'||careSubView==='devmilestones') ? 'development' : null;
@@ -5889,11 +6115,11 @@ function bindCare(){
     });
   });
   const gbl = document.getElementById('goBriefLink');
-  if(gbl) gbl.addEventListener('click', ()=>{ currentView='brief'; render(); });
+  if(gbl) gbl.addEventListener('click', ()=> navigateTo('brief'));
   const grcl = document.getElementById('goRecapLink');
-  if(grcl) grcl.addEventListener('click', ()=>{ recapYearMonth=null; currentView='recap'; render(); });
+  if(grcl) grcl.addEventListener('click', ()=>{ recapYearMonth=null; navigateTo('recap'); });
   const gtfc = document.getElementById('goTimelineFromCare');
-  if(gtfc) gtfc.addEventListener('click', ()=>{ currentView='timeline'; render(); });
+  if(gtfc) gtfc.addEventListener('click', ()=> navigateTo('timeline'));
   const nbPeriodToggle = document.getElementById('nbPeriodToggle');
   if(nbPeriodToggle) nbPeriodToggle.addEventListener('click', ()=>{
     nursingBalancePeriod = nursingBalancePeriod===7 ? 30 : nursingBalancePeriod===30 ? 0 : 7;
@@ -5922,7 +6148,7 @@ function renderTimeline(){
   const hasUpcoming = up.appts.length || up.vaccines.length;
   return `
     <div class="hero">
-      <button id="timelineBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
+      ${backButton('Home')}
       <h1>Timeline</h1><p>Everything that's happened, in order. Tap an entry for details.</p>
     </div>
     <div class="tabs" id="timelineFilters">
@@ -5953,8 +6179,6 @@ function bindTimeline(){
   document.querySelectorAll('#timelineFilters [data-tf]').forEach(b=>{
     b.addEventListener('click', ()=>{ timelineFilter=b.dataset.tf; renderMain(); });
   });
-  const back = document.getElementById('timelineBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
   document.querySelectorAll('[data-tlitem]').forEach(row=>{
     row.addEventListener('click', ()=>{
       const [kind,id] = row.dataset.tlitem.split(':');
@@ -6427,7 +6651,7 @@ function renderSettings(){
   const lastBackup = state.prefs && state.prefs.lastBackupAt;
   return `
     <div class="hero">
-      <button id="settingsBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Home</button>
+      ${backButton('Home')}
       <h1>Settings</h1><p>Account, appearance, and data.</p>
     </div>
     <div class="card">
@@ -6448,8 +6672,6 @@ function renderSettings(){
   `;
 }
 function bindSettings(){
-  const back = document.getElementById('settingsBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='home'; render(); });
   const sob = document.getElementById('settingsSignOutBtn');
   if(sob) sob.addEventListener('click', async ()=>{
     try{ await signOutUser(); currentView='home'; }
@@ -6718,9 +6940,9 @@ function bindHealth(){
       const h = parseFloat(document.getElementById(`compHc-${id}`).value);
       const notes = document.getElementById(`compNotes-${id}`).value.trim();
       const followup = document.getElementById(`compFollowup-${id}`).checked;
-      if(!isNaN(w)) state.measurements.push({id:uid(), type:'weight', date:a.date, value:w, note:'From appointment: '+a.title});
-      if(!isNaN(l)) state.measurements.push({id:uid(), type:'length', date:a.date, value:l, note:'From appointment: '+a.title});
-      if(!isNaN(h)) state.measurements.push({id:uid(), type:'hc', date:a.date, value:h, note:'From appointment: '+a.title});
+      if(!isNaN(w)) state.measurements.push({id:uid(), type:'weight', date:a.date, value:w, note:'From appointment: '+a.title, ...attributionFields()});
+      if(!isNaN(l)) state.measurements.push({id:uid(), type:'length', date:a.date, value:l, note:'From appointment: '+a.title, ...attributionFields()});
+      if(!isNaN(h)) state.measurements.push({id:uid(), type:'hc', date:a.date, value:h, note:'From appointment: '+a.title, ...attributionFields()});
       dueVaccinesNearDate(a.date).forEach(v=>{
         const cb = document.getElementById(`compVac-${id}-${v.id}`);
         if(cb && cb.checked){ const vv = state.vaccines.find(x=>x.id===v.id); if(vv) vv.givenDate = a.date; }
@@ -6847,7 +7069,7 @@ function renderPhotoBookList(){
   const books = state.photoBooks.slice().sort((a,b)=>new Date(b.updatedAt)-new Date(a.updatedAt));
   return `
     <div class="hero">
-      <button id="pbBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Moments</button>
+      ${backButton('Moments')}
       <h1>Photo Books</h1><p>Turn her moments into a keepsake.</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;">
@@ -6888,7 +7110,7 @@ function renderPhotoBookEditor(){
   const eligible = photoBookEligibleMoments(book);
   const lowResCount = eligible.reduce((s,m)=> s+normalizeMoment(m).photos.filter(isLowResPhoto).length, 0);
   return `
-    <div class="hero"><button id="pbEditorBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Photo Books</button><h1>${escapeHtml(book.title)}</h1></div>
+    <div class="hero">${backButton('Photo Books')}<h1>${escapeHtml(book.title)}</h1></div>
     <div class="card">
       <label>Book title</label><input type="text" id="pbTitle" value="${escapeHtml(book.title)}">
       <label>Subtitle</label><input type="text" id="pbSubtitle" value="${escapeHtml(book.subtitle)}">
@@ -6905,8 +7127,6 @@ function renderPhotoBookEditor(){
   `;
 }
 function bindPhotoBookEditor(){
-  const back = document.getElementById('pbEditorBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='photobook'; render(); });
   const savePatch = async (patch)=>{
     const idx = state.photoBooks.findIndex(b=>b.id===currentPhotoBookId);
     if(idx===-1) return;
@@ -6933,22 +7153,20 @@ function bindPhotoBookEditor(){
     });
   });
   const previewBtn = document.getElementById('pbPreviewBtn');
-  if(previewBtn) previewBtn.addEventListener('click', ()=>{ currentView='photobookpreview'; render(); });
+  if(previewBtn) previewBtn.addEventListener('click', ()=> navigateTo('photobookpreview'));
 }
 function bindPhotoBookList(){
-  const back = document.getElementById('pbBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='milestones'; render(); });
   document.querySelectorAll('[data-pbcreate]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       const draft = newPhotoBookDraft(b.dataset.pbcreate);
       state.photoBooks.push(draft);
       await saveKey('photoBooks', state.photoBooks);
       currentPhotoBookId = draft.id;
-      currentView='photobookeditor'; render();
+      navigateTo('photobookeditor');
     });
   });
   document.querySelectorAll('[data-pbopen]').forEach(b=>{
-    b.addEventListener('click', ()=>{ currentPhotoBookId=b.dataset.pbopen; currentView='photobookeditor'; render(); });
+    b.addEventListener('click', ()=>{ currentPhotoBookId=b.dataset.pbopen; navigateTo('photobookeditor'); });
   });
 }
 /* Book pages are plain HTML styled for print — "Export PDF" uses the
@@ -7027,7 +7245,7 @@ function renderPhotoBookPreview(){
   const book = state.photoBooks.find(b=>b.id===currentPhotoBookId);
   if(!book) return `<div class="empty">This book was removed.</div>`;
   return `
-    <div class="hero no-print"><button id="pbPreviewBack" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}Edit book</button><h1>Preview</h1><p>Scroll to review, then export.</p></div>
+    <div class="hero no-print">${backButton('Edit book')}<h1>Preview</h1><p>Scroll to review, then export.</p></div>
     <button class="btn no-print" id="pbExportBtn" style="margin-bottom:16px;">Export / Print PDF</button>
     <div class="book-preview-scale" data-book-theme="${book.theme}">
       ${renderPhotoBookPages(book)}
@@ -7035,8 +7253,6 @@ function renderPhotoBookPreview(){
   `;
 }
 function bindPhotoBookPreview(){
-  const back = document.getElementById('pbPreviewBack');
-  if(back) back.addEventListener('click', ()=>{ currentView='photobookeditor'; render(); });
   const exportBtn = document.getElementById('pbExportBtn');
   if(exportBtn) exportBtn.addEventListener('click', ()=> window.print());
 }
@@ -7178,7 +7394,7 @@ function bindMilestones(){
     el.addEventListener('click', ()=> openSheet('moment'));
   });
   const gpbl = document.getElementById('goPhotoBookLink');
-  if(gpbl) gpbl.addEventListener('click', ()=>{ currentView='photobook'; render(); });
+  if(gpbl) gpbl.addEventListener('click', ()=> navigateTo('photobook'));
 }
 
 const DELETE_MAP = {
