@@ -469,18 +469,28 @@
   .dayflow-summary-row{ display:flex; gap:14px; margin-top:10px; }
   .dayflow-summary-item{ font-size:11.5px; color:var(--ink-soft); }
   .dayflow-summary-item b{ color:var(--ink); font-weight:800; }
-  .dayflow-sleep{ display:flex; gap:12px; align-items:flex-start; padding:12px 0; cursor:pointer; }
-  .dayflow-sleep-icon{ width:32px; height:32px; border-radius:50%; background:rgba(142,111,176,0.16); display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
-  .dayflow-sleep-title{ font-weight:800; font-size:13px; color:var(--lavender-deep); }
-  .dayflow-sleep-time{ font-size:13px; font-weight:700; margin-top:1px; }
-  .dayflow-sleep-dur{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
-  .dayflow-sleep-actions{ margin-top:8px; display:flex; gap:8px; }
-  .dayflow-awake-header{ font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-tertiary); padding:10px 0 4px 44px; }
-  .dayflow-event{ display:flex; align-items:baseline; gap:10px; padding:5px 0 5px 44px; cursor:pointer; font-size:13px; }
-  .dayflow-event .dayflow-time{ font-weight:700; color:var(--ink-soft); font-size:11.5px; width:48px; flex-shrink:0; }
-  .dayflow-event .dayflow-icon{ margin-right:2px; }
-  .dayflow-event .dayflow-desc{ color:var(--ink); }
-  .dayflow-divider{ border-top:1px solid var(--line); margin:2px 0 2px 44px; }
+  .dayflow-visual{ position:relative; margin-top:14px; }
+  .dayflow-hour-tick{ position:absolute; left:26px; right:0; border-top:1px solid var(--line); opacity:0.5; }
+  .dayflow-hour-label{ position:absolute; left:0; font-size:9px; color:var(--ink-tertiary); width:24px; }
+  .dayflow-sleep-block{ position:absolute; left:26px; width:60px; border-radius:8px; background:rgba(142,111,176,0.4); cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  [data-theme="dark"] .dayflow-sleep-block{ background:rgba(195,170,221,0.32); }
+  .dayflow-sleep-block-text{ font-size:9.5px; font-weight:800; color:var(--lavender-deep); text-align:center; line-height:1.2; padding:2px; }
+  [data-theme="dark"] .dayflow-sleep-block-text{ color:var(--ink); }
+  .dayflow-continuation{ position:absolute; left:0; right:0; height:3px; background:repeating-linear-gradient(90deg, var(--lavender-deep) 0 4px, transparent 4px 8px); opacity:0.6; }
+  .dayflow-awake-tag{ position:absolute; left:90px; font-size:9px; font-weight:700; color:var(--ink-tertiary); white-space:nowrap; }
+  .dayflow-marker{ position:absolute; left:96px; display:flex; align-items:center; gap:5px; cursor:pointer; transform:translateY(-50%); white-space:nowrap; }
+  .dayflow-dot{ width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+  .dayflow-dot-feed{ background:#EC9384; }
+  .dayflow-dot-wet{ background:#5FA8D3; }
+  .dayflow-dot-dirty{ background:#B8823A; }
+  [data-theme="dark"] .dayflow-dot-dirty{ background:#D9A15C; }
+  .dayflow-dot-temp{ background:var(--status-critical-fg); }
+  .dayflow-dot-cluster{ background:var(--lavender-deep); }
+  .dayflow-marker-label{ font-size:10.5px; font-weight:700; color:var(--ink); background:var(--card); padding:2px 6px; border-radius:6px; box-shadow:var(--shadow-1); }
+  .dayflow-cluster-label{ color:#fff; background:var(--lavender-deep); }
+  .dayflow-cluster-expand{ position:absolute; left:96px; background:var(--card); border-radius:var(--radius-small); box-shadow:var(--shadow-2); padding:6px; z-index:3; display:flex; flex-direction:column; gap:4px; }
+  .dayflow-now-line{ position:absolute; left:26px; right:0; border-top:2px solid var(--lavender-deep); z-index:2; }
+  .dayflow-now-line::before{ content:''; position:absolute; left:-4px; top:-4px; width:8px; height:8px; border-radius:50%; background:var(--lavender-deep); }
   .qa-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
   .qa-btn{ display:flex; flex-direction:column; align-items:center; gap:5px; background:var(--card); border:none; border-radius:var(--radius-control); box-shadow:var(--shadow-1); padding:11px 4px; font-family:'Nunito',sans-serif; font-weight:700; font-size:10.5px; color:var(--ink-soft); cursor:pointer; line-height:1.3; }
   .qa-btn.qa-active{ background:var(--lavender-deep); color:#fff; }
@@ -976,7 +986,8 @@ function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(
 /* App is always displayed/logged in Sydney time, regardless of the device's own timezone. */
 const APP_TZ = 'Australia/Sydney';
 function sydDateParts(dateInput){
-  const d = dateInput ? new Date(dateInput) : new Date();
+  const valid = dateInput ? toValidDate(dateInput) : new Date();
+  const d = valid || new Date();
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: APP_TZ, year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
   }).formatToParts(d);
@@ -984,9 +995,28 @@ function sydDateParts(dateInput){
   return { year:get('year'), month:get('month'), day:get('day'), hour:get('hour'), minute:get('minute') };
 }
 function sydDateKey(dateInput){ const p=sydDateParts(dateInput); return `${p.year}-${p.month}-${p.day}`; }
-function fmtDate(d){ return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric',timeZone:APP_TZ}); }
-function fmtDateTime(d){ return new Date(d).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}); }
-function fmtDateFull(d){ return new Date(d).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:APP_TZ}); }
+/* Central timestamp normaliser — every date-formatting function in the app
+   routes through this rather than constructing `new Date(x)` directly, so a
+   value that can't be parsed can never leak "Invalid Date" into the UI. It
+   accepts every representation actually found in this app's stored data
+   across iterations: JS Date, ISO string, epoch ms, and Firestore
+   Timestamp-style objects (both the SDK's {toDate()} shape and the plain
+   {seconds,nanoseconds} / {_seconds,_nanoseconds} shapes some exports use). */
+function toValidDate(value){
+  if(value==null) return null;
+  if(value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  if(typeof value==='number'){ const d=new Date(value); return isNaN(d.getTime())?null:d; }
+  if(typeof value==='string'){ if(!value.trim()) return null; const d=new Date(value); return isNaN(d.getTime())?null:d; }
+  if(typeof value==='object'){
+    if(typeof value.toDate==='function'){ try{ const d=value.toDate(); return isNaN(d.getTime())?null:d; }catch(e){ return null; } }
+    if(typeof value.seconds==='number'){ const d=new Date(value.seconds*1000+Math.round((value.nanoseconds||0)/1e6)); return isNaN(d.getTime())?null:d; }
+    if(typeof value._seconds==='number'){ const d=new Date(value._seconds*1000+Math.round((value._nanoseconds||0)/1e6)); return isNaN(d.getTime())?null:d; }
+  }
+  return null;
+}
+function fmtDate(d){ const dt=toValidDate(d); return dt ? dt.toLocaleDateString(undefined,{month:'short',day:'numeric',timeZone:APP_TZ}) : '—'; }
+function fmtDateTime(d){ const dt=toValidDate(d); return dt ? dt.toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit',timeZone:APP_TZ}) : '—'; }
+function fmtDateFull(d){ const dt=toValidDate(d); return dt ? dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric',year:'numeric',timeZone:APP_TZ}) : '—'; }
 function todayInput(){ const p=sydDateParts(); return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; }
 function todayDateInput(){ const p=sydDateParts(); return `${p.year}-${p.month}-${p.day}`; }
 function fmtDuration(mins){
@@ -994,7 +1024,7 @@ function fmtDuration(mins){
   const h = Math.floor(mins/60), m = mins%60;
   return h>0 ? `${h}h ${m}m` : `${m}m`;
 }
-function fmtTime(d){ return new Date(d).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:APP_TZ}); }
+function fmtTime(d){ const dt=toValidDate(d); return dt ? dt.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit',timeZone:APP_TZ}) : '—'; }
 function isoToLocalInput(iso){ const p=sydDateParts(iso); return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`; }
 /* ---------------- Live sleep timer ---------------- */
 let sleepTickInterval = null;
@@ -4083,8 +4113,9 @@ function sydMidnightUTC(dayKey){
   return guess;
 }
 function sleepBounds(s){
-  const start = new Date(s.date);
-  const end = s.endAt ? new Date(s.endAt) : new Date(start.getTime() + (s.mins||0)*60000);
+  const start = toValidDate(s.date) || new Date();
+  const endAtValid = toValidDate(s.endAt);
+  const end = endAtValid || new Date(start.getTime() + (s.mins||0)*60000);
   return {start, end};
 }
 /* Canonical overlap calculation — every daily/range sleep total in the app must
@@ -5461,41 +5492,107 @@ function buildDayFlowSegments(data){
   }
   return segments;
 }
-function dayFlowEventIcon(kind, item){
-  if(kind==='feed') return icon('feed',13);
-  if(kind==='nappy') return icon('nappy',13);
-  return icon('temp',13);
+/* ---- Full Day Flow body: one hybrid visual timeline, not text rows and not
+   three separate lane columns. Sleep blocks are positioned by real time on
+   a single compressed vertical axis (spec: true positioning, but not 1
+   pixel-per-real-minute — that's what made the very first version enormous).
+   Feeds/nappies/temps share one "events" zone beside the axis, clustering
+   when close together so labels never overlap. Awake time is communicated
+   primarily by the visual gap itself, with only a small secondary label —
+   never a repeated section heading — and only when a real sleep record
+   bounds it on both sides. ---- */
+let expandedDayFlowCluster = null;
+const DAYFLOW_PX_PER_MIN = 0.32;
+function dayFlowCompactLabel(e){
+  if(e.kind==='feed'){
+    const nf = e.item;
+    if(nf.type==='breastfeeding'){
+      const parts=[];
+      if(nf.leftMins) parts.push('L'+Math.round(nf.leftMins)+'m');
+      if(nf.rightMins) parts.push('R'+Math.round(nf.rightMins)+'m');
+      return parts.length ? parts.join('+') : fmtDuration(nf.totalMins||0);
+    }
+    if(nf.type==='formula'||nf.type==='expressed') return Math.round(nf.consumedMl||0)+'ml';
+    if(nf.type==='pumping') return Math.round(nf.pumpTotalMl||0)+'ml';
+    return 'Feed';
+  }
+  if(e.kind==='nappy') return e.item.type==='wet'?'Wet':e.item.type==='poo'?'Dirty':'Wet+dirty';
+  return `${e.item.tempC}°`;
 }
-function dayFlowEventDesc(kind, item){
-  if(kind==='feed') return feedSummaryLine(item).replace(/^🍼\s*/,'');
-  if(kind==='nappy') return item.type==='wet'?'Wet nappy':item.type==='poo'?'Dirty nappy':'Wet + dirty nappy';
-  return `${item.tempC}°C`;
+function dayFlowMarkerClass(e){
+  if(e.kind==='feed') return 'dayflow-dot-feed';
+  if(e.kind==='temperature') return 'dayflow-dot-temp';
+  return e.item.type==='poo' ? 'dayflow-dot-dirty' : 'dayflow-dot-wet';
 }
-function renderDayFlowEventRow(e){
-  return `<div class="dayflow-event" data-tlitem="${e.kind}:${e.id}"><span class="dayflow-time">${fmtTime(e.item.date)}</span><span class="dayflow-icon">${dayFlowEventIcon(e.kind,e.item)}</span><span class="dayflow-desc">${escapeHtml(dayFlowEventDesc(e.kind,e.item))}</span></div>`;
+function clusterDayFlowEvents(items, minGapPx){
+  const sorted = items.slice().sort((a,b)=>a.top-b.top);
+  const clusters = [];
+  sorted.forEach(it=>{
+    const last = clusters[clusters.length-1];
+    if(last && (it.top - last.items[last.items.length-1].top) < minGapPx) last.items.push(it);
+    else clusters.push({ top: it.top, items:[it] });
+  });
+  return clusters;
 }
-function renderDayFlowSleepSegment(block){
-  const isOngoing = block.isActive;
-  const startLabel = block.startedBefore ? 'Continued from yesterday' : fmtTime(block.s.date);
-  const endLabel = isOngoing ? 'now' : (block.continuesAfter ? 'continues tomorrow' : fmtTime(block.s.endAt));
-  const durMin = (block.clipEnd-block.clipStart)/60000;
-  const durLabel = fmtDuration(durMin) + ((block.startedBefore||block.continuesAfter) ? ' today' : '');
+function renderDayFlowEventMarker(cluster, ci){
+  if(cluster.items.length===1){
+    const e = cluster.items[0];
+    return `<div class="dayflow-marker" data-tlitem="${e.kind}:${e.id}" style="top:${cluster.top.toFixed(1)}px;"><span class="dayflow-dot ${dayFlowMarkerClass(e)}"></span><span class="dayflow-marker-label">${fmtTime(e.item.date)} · ${escapeHtml(dayFlowCompactLabel(e))}</span></div>`;
+  }
+  const clusterId = 'ev-'+ci;
+  const isExpanded = expandedDayFlowCluster===clusterId;
   return `
-    <div class="dayflow-sleep" ${isOngoing?'':`data-tlitem="sleep:${block.s.id}"`}>
-      <div class="dayflow-sleep-icon">${icon('sleep',15)}</div>
-      <div style="flex:1;">
-        <div class="dayflow-sleep-title">${isOngoing?'Sleeping now':'Sleep'}</div>
-        <div class="dayflow-sleep-time">${startLabel} → ${endLabel}</div>
-        <div class="dayflow-sleep-dur">${durLabel}</div>
-        ${isOngoing ? `<div class="dayflow-sleep-actions"><button class="btn secondary" id="dayFlowWakeUpBtn" style="padding:7px 16px;font-size:12.5px;">Wake up</button></div>` : ''}
-      </div>
-    </div>
+    <div class="dayflow-marker dayflow-cluster" data-dfcluster="${clusterId}" style="top:${cluster.top.toFixed(1)}px;"><span class="dayflow-dot dayflow-dot-cluster"></span><span class="dayflow-marker-label dayflow-cluster-label">${cluster.items.length} events</span></div>
+    ${isExpanded ? `<div class="dayflow-cluster-expand" style="top:${(cluster.top+18).toFixed(1)}px;">${cluster.items.map(e=>`<div class="dayflow-marker" data-tlitem="${e.kind}:${e.id}" style="position:static;"><span class="dayflow-dot ${dayFlowMarkerClass(e)}"></span><span class="dayflow-marker-label">${fmtTime(e.item.date)} · ${escapeHtml(dayFlowCompactLabel(e))}</span></div>`).join('')}</div>` : ''}
   `;
 }
-function renderDayFlowSegment(seg){
-  if(seg.type==='sleep') return renderDayFlowSleepSegment(seg.block);
-  const header = seg.confident ? `<div class="dayflow-awake-header">Awake · ${fmtDuration((seg.end-seg.start)/60000)}</div>` : '';
-  return `${header}${seg.events.map(renderDayFlowEventRow).join('')}`;
+function renderDayFlowSleepBlock(block, minutesFromMidnight){
+  const top = minutesFromMidnight(block.clipStart)*DAYFLOW_PX_PER_MIN;
+  const height = Math.max(9, (minutesFromMidnight(block.clipEnd)-minutesFromMidnight(block.clipStart))*DAYFLOW_PX_PER_MIN);
+  const durMin = (block.clipEnd-block.clipStart)/60000;
+  const showText = height>=20;
+  return `<div class="dayflow-sleep-block" data-tlitem="sleep:${block.s.id}" style="top:${top.toFixed(1)}px;height:${height.toFixed(1)}px;">
+    ${block.startedBefore ? `<div class="dayflow-continuation" style="top:-4px;"></div>` : ''}
+    ${showText ? `<span class="dayflow-sleep-block-text">${block.isActive?'Sleeping · ':''}${fmtDuration(durMin)}</span>` : ''}
+    ${block.continuesAfter ? `<div class="dayflow-continuation" style="bottom:-4px;"></div>` : ''}
+  </div>`;
+}
+function renderDayFlowAwakeTag(seg, minutesFromMidnight){
+  if(!seg.confident) return '';
+  const midTop = ((minutesFromMidnight(seg.start)+minutesFromMidnight(seg.end))/2)*DAYFLOW_PX_PER_MIN;
+  return `<div class="dayflow-awake-tag" style="top:${midTop.toFixed(1)}px;">Awake ${fmtDuration((seg.end-seg.start)/60000)}</div>`;
+}
+function renderDayFlowVisual(data, segments){
+  const isToday = data.dayKey===sydDateKey();
+  const minutesFromMidnight = ms => (ms-data.dayStart)/60000;
+  const totalHeight = Math.round(1440*DAYFLOW_PX_PER_MIN);
+  let hourTicks = '';
+  [0,3,6,9,12,15,18,21].forEach(h=>{
+    const top = h*60*DAYFLOW_PX_PER_MIN;
+    const label = h===0?'12a':h<12?h+'a':h===12?'12p':(h-12)+'p';
+    hourTicks += `<div class="dayflow-hour-tick" style="top:${top.toFixed(0)}px;"></div><div class="dayflow-hour-label" style="top:${(top-6).toFixed(0)}px;">${label}</div>`;
+  });
+  const sleepHtml = data.sleepBlocks.map(b=>renderDayFlowSleepBlock(b, minutesFromMidnight)).join('');
+  const allEvents = [
+    ...data.feeds.map(f=>({kind:'feed', id:f.id, item:f, ms:new Date(f.date).getTime()})),
+    ...data.nappies.map(n=>({kind:'nappy', id:n.id, item:n, ms:new Date(n.date).getTime()})),
+    ...data.temps.map(t=>({kind:'temperature', id:t.id, item:t, ms:new Date(t.date).getTime()}))
+  ].map(e=>({...e, top: minutesFromMidnight(e.ms)*DAYFLOW_PX_PER_MIN}));
+  const eventsHtml = clusterDayFlowEvents(allEvents, 20).map(renderDayFlowEventMarker).join('');
+  const awakeHtml = segments.filter(s=>s.type==='awake').map(s=>renderDayFlowAwakeTag(s, minutesFromMidnight)).join('');
+  const nowLine = isToday ? `<div class="dayflow-now-line" style="top:${(minutesFromMidnight(Date.now())*DAYFLOW_PX_PER_MIN).toFixed(1)}px;"></div>` : '';
+  const activeSleep = data.sleepBlocks.find(b=>b.isActive);
+  return `
+    ${activeSleep ? `
+    <div class="card" style="margin-bottom:12px;background:var(--surface-muted);">
+      <div class="secondary-metric" style="color:var(--lavender-deep);">Sleeping now</div>
+      <div class="hero-metric sleep-elapsed-live" style="font-size:24px;margin-top:2px;">${fmtDuration((activeSleep.clipEnd-activeSleep.clipStart)/60000)}</div>
+      <button class="btn secondary" id="dayFlowWakeUpBtn" style="margin-top:10px;padding:8px 16px;font-size:12.5px;">Wake up</button>
+    </div>` : ''}
+    <div class="dayflow-visual" style="height:${totalHeight}px;">
+      ${hourTicks}${awakeHtml}${sleepHtml}${eventsHtml}${nowLine}
+    </div>
+  `;
 }
 /* ---- Compact 24h ribbon: the precise, proportional view. Lives in Care. ---- */
 function renderDayFlowRibbon(dayKey){
@@ -5556,7 +5653,7 @@ function renderDayFlowFull(){
       <div class="dayflow-summary-item"><b>${data.ds.feedCount}</b> feeds</div>
       <div class="dayflow-summary-item"><b>${data.nappyStats.wet}💧 ${data.nappyStats.dirty}💩</b> nappies</div>
     </div>
-    ${data.hasAny ? `<div style="margin-top:10px;">${segments.map(renderDayFlowSegment).join('')}</div>` : `
+    ${data.hasAny ? renderDayFlowVisual(data, segments) : `
       <div class="empty" style="margin-top:16px;">No activity logged for this day.</div>
       <button class="btn" id="dayFlowLogBtn" style="margin-top:10px;">Log activity</button>
     `}
@@ -5566,18 +5663,25 @@ function renderDayFlowFull(){
 function bindDayFlowFull(){
   document.querySelectorAll('[data-dfprev]').forEach(b=> b.addEventListener('click', ()=>{
     const k = shiftDayKey(rhythmDateKey||sydDateKey(), -1);
-    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
+    rhythmDateKey = k===sydDateKey() ? null : k; expandedDayFlowCluster=null; renderMain();
   }));
   document.querySelectorAll('[data-dfnext]').forEach(b=> b.addEventListener('click', ()=>{
     const k = shiftDayKey(rhythmDateKey||sydDateKey(), 1);
     if(k>sydDateKey()) return;
-    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
+    rhythmDateKey = k===sydDateKey() ? null : k; expandedDayFlowCluster=null; renderMain();
   }));
-  document.querySelectorAll('[data-dftoday]').forEach(b=> b.addEventListener('click', ()=>{ rhythmDateKey=null; renderMain(); }));
+  document.querySelectorAll('[data-dftoday]').forEach(b=> b.addEventListener('click', ()=>{ rhythmDateKey=null; expandedDayFlowCluster=null; renderMain(); }));
   const picker = document.getElementById('dayFlowDatePicker');
   const dateBtn = document.getElementById('dayFlowDateBtn');
   if(dateBtn && picker) dateBtn.addEventListener('click', ()=>{ if(picker.showPicker) picker.showPicker(); else picker.click(); });
-  if(picker) picker.addEventListener('change', ()=>{ rhythmDateKey = picker.value===sydDateKey() ? null : picker.value; renderMain(); });
+  if(picker) picker.addEventListener('change', ()=>{ rhythmDateKey = picker.value===sydDateKey() ? null : picker.value; expandedDayFlowCluster=null; renderMain(); });
+  document.querySelectorAll('[data-dfcluster]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const id = el.dataset.dfcluster;
+      expandedDayFlowCluster = expandedDayFlowCluster===id ? null : id;
+      renderMain();
+    });
+  });
   document.querySelectorAll('[data-tlitem]').forEach(row=>{
     row.addEventListener('click', ()=>{ const [kind,id]=row.dataset.tlitem.split(':'); if(kind) openDetailSheet(kind,id); });
   });
