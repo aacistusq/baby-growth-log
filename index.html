@@ -452,23 +452,35 @@
   .moment-viewer-img-wrap img{ max-width:100%; max-height:100%; object-fit:contain; border-radius:8px; }
   .moment-viewer-info{ padding:16px 22px calc(26px + env(safe-area-inset-bottom)); color:#fff; }
   .moment-viewer-navbtn{ position:absolute; top:50%; transform:translateY(-50%); background:rgba(255,255,255,0.16); border:none; color:#fff; width:34px; height:34px; border-radius:50%; font-size:18px; cursor:pointer; }
-  .rhythm-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; flex-shrink:0; }
-  .rhythm-row{ display:flex; align-items:center; background:var(--card); border-radius:var(--radius-small); padding:3px 8px; box-shadow:var(--shadow-1); font-size:10.5px; font-weight:600; color:var(--ink); white-space:nowrap; cursor:pointer; }
-  .rhythm-lanes{ position:relative; }
-  .rhythm-hour-label{ position:absolute; left:0; font-size:9px; color:var(--ink-tertiary); width:28px; }
-  .rhythm-gridline{ position:absolute; left:30px; right:0; border-top:1px solid var(--line); }
-  .rhythm-lane-head{ position:absolute; top:-18px; font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-tertiary); }
-  .rhythm-sleep-block{ position:absolute; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-  .rhythm-sleep-icon{ font-size:11px; opacity:0.85; }
-  .rhythm-sleep-flag{ position:absolute; top:2px; right:3px; font-size:8px; font-weight:900; color:var(--ink-soft); }
-  .rhythm-marker{ position:absolute; display:flex; align-items:center; gap:4px; cursor:pointer; transform:translateY(-50%); white-space:nowrap; }
-  .rhythm-marker .rhythm-marker-time{ font-size:9px; font-weight:700; color:var(--ink-soft); background:var(--card); padding:1px 4px; border-radius:5px; box-shadow:var(--shadow-1); }
-  .rhythm-cluster{ position:absolute; display:flex; align-items:center; gap:4px; cursor:pointer; transform:translateY(-50%); white-space:nowrap; }
-  .rhythm-cluster .rhythm-marker-time{ font-size:9px; font-weight:800; color:#fff; background:var(--lavender-deep); padding:1px 5px; border-radius:5px; }
-  .rhythm-cluster-expand{ position:absolute; background:var(--card); border-radius:var(--radius-small); box-shadow:var(--shadow-2); padding:5px; z-index:3; }
-  .rhythm-cluster-expand .rhythm-marker{ position:static; transform:none; padding:3px 4px; }
-  .rhythm-now-line{ position:absolute; left:30px; right:0; border-top:2px solid var(--lavender-deep); z-index:2; }
-  .rhythm-now-dot{ position:absolute; left:-4px; top:-4px; width:8px; height:8px; border-radius:50%; background:var(--lavender-deep); }
+  /* ============ Day Flow ============ */
+  .dayflow-ribbon-wrap{ margin-top:4px; }
+  .dayflow-ribbon-ticks{ display:flex; justify-content:space-between; font-size:9px; color:var(--ink-tertiary); font-weight:700; margin-bottom:4px; }
+  .dayflow-ribbon{ position:relative; height:44px; cursor:pointer; }
+  .dayflow-ribbon-track{ position:absolute; left:0; right:0; top:0; height:16px; background:var(--surface-muted); border-radius:5px; overflow:hidden; }
+  .dayflow-ribbon-sleep{ position:absolute; top:0; height:100%; background:var(--lavender-deep); opacity:0.55; }
+  .dayflow-ribbon-feeds, .dayflow-ribbon-nappies{ position:absolute; left:0; right:0; height:10px; }
+  .dayflow-ribbon-feeds{ top:22px; }
+  .dayflow-ribbon-nappies{ top:34px; }
+  .dayflow-ribbon-dot{ position:absolute; top:1px; width:6px; height:6px; border-radius:50%; transform:translateX(-50%); }
+  .dayflow-ribbon-feed{ background:#EC9384; }
+  .dayflow-ribbon-nappy{ background:#5FA8D3; }
+  .dayflow-ribbon-now{ position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--lavender-deep); z-index:2; }
+  .dayflow-ribbon-now::before{ content:''; position:absolute; top:-4px; left:-3px; width:8px; height:8px; border-radius:50%; background:var(--lavender-deep); }
+  .dayflow-summary-row{ display:flex; gap:14px; margin-top:10px; }
+  .dayflow-summary-item{ font-size:11.5px; color:var(--ink-soft); }
+  .dayflow-summary-item b{ color:var(--ink); font-weight:800; }
+  .dayflow-sleep{ display:flex; gap:12px; align-items:flex-start; padding:12px 0; cursor:pointer; }
+  .dayflow-sleep-icon{ width:32px; height:32px; border-radius:50%; background:rgba(142,111,176,0.16); display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-top:1px; }
+  .dayflow-sleep-title{ font-weight:800; font-size:13px; color:var(--lavender-deep); }
+  .dayflow-sleep-time{ font-size:13px; font-weight:700; margin-top:1px; }
+  .dayflow-sleep-dur{ font-size:11.5px; color:var(--ink-soft); margin-top:1px; }
+  .dayflow-sleep-actions{ margin-top:8px; display:flex; gap:8px; }
+  .dayflow-awake-header{ font-size:10.5px; font-weight:800; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-tertiary); padding:10px 0 4px 44px; }
+  .dayflow-event{ display:flex; align-items:baseline; gap:10px; padding:5px 0 5px 44px; cursor:pointer; font-size:13px; }
+  .dayflow-event .dayflow-time{ font-weight:700; color:var(--ink-soft); font-size:11.5px; width:48px; flex-shrink:0; }
+  .dayflow-event .dayflow-icon{ margin-right:2px; }
+  .dayflow-event .dayflow-desc{ color:var(--ink); }
+  .dayflow-divider{ border-top:1px solid var(--line); margin:2px 0 2px 44px; }
   .qa-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:14px; }
   .qa-btn{ display:flex; flex-direction:column; align-items:center; gap:5px; background:var(--card); border:none; border-radius:var(--radius-control); box-shadow:var(--shadow-1); padding:11px 4px; font-family:'Nunito',sans-serif; font-weight:700; font-size:10.5px; color:var(--ink-soft); cursor:pointer; line-height:1.3; }
   .qa-btn.qa-active{ background:var(--lavender-deep); color:#fff; }
@@ -650,6 +662,10 @@ function getCurrentParentProfile(){
 function attributionFields(){
   const p = getCurrentParentProfile();
   return { createdBy: p.email||null, createdByRole: p.role||null };
+}
+function roleSuffix(){
+  const p = getCurrentParentProfile();
+  return p.role ? ' · '+p.role : '';
 }
 function timeAwareGreeting(role){
   if(!role) return 'Hi there';
@@ -862,77 +878,81 @@ let state = {
 let currentView = 'home';
 /* ================= Central navigation ================= */
 /* One stack-based system instead of scattered currentView='x' hardcoding.
-   navigateTo() snapshots enough state to restore the exact screen the user
-   was on (sub-view, selected tab/filter/day, scroll position) and pushes
-   real browser history so the Android/browser Back button behaves exactly
-   like the in-app Back control — both paths end up calling goBack(). */
-let navStack = [];
+   navigateTo() stores a full state snapshot directly inside the browser's
+   own history entries (via pushState/history.state) rather than a separate
+   in-memory array — that was the actual bug: a parallel array can silently
+   drift out of sync with the browser's real history (e.g. across a root-tab
+   switch), making the Android/browser Back button behave differently from
+   the in-app Back control. With history.state as the single source of
+   truth, that class of bug is structurally impossible — both controls now
+   do the exact same thing: call history.back() and let one popstate handler
+   apply whatever state actually comes back. */
 const VIEW_PARENT = {
   timeline:'home', ask:'home', settings:'home', brief:'care', recap:'care',
   photobook:'milestones', photobookeditor:'photobook', photobookpreview:'photobookeditor',
-  care:'home', growth:'home', health:'home', milestones:'home'
+  care:'home', growth:'home', health:'home', milestones:'home', dayflow:'care'
 };
 const VIEW_LABEL = {
   home:'Home', care:'Care', growth:'Growth', health:'Health', milestones:'Moments',
   timeline:'Timeline', ask:'Ask', settings:'Settings', brief:'Care', recap:'Care',
-  photobook:'Moments', photobookeditor:'Photo Books', photobookpreview:'Edit book'
+  photobook:'Moments', photobookeditor:'Photo Books', photobookpreview:'Edit book', dayflow:'Day Flow'
 };
-function snapshotNavState(){
+function currentNavSnapshot(fromView){
   return {
-    view: currentView, careSubView, healthSubView, growthTab: currentGrowthTab,
-    timelineFilter, weekMetric, weekActiveIdx, weekOffset, rhythmDateKey,
-    recapYearMonth, currentPhotoBookId, scrollY: window.scrollY
+    view: currentView, fromView: fromView===undefined ? null : fromView,
+    careSubView, healthSubView, growthTab: currentGrowthTab, timelineFilter,
+    weekMetric, weekActiveIdx, weekOffset, rhythmDateKey, recapYearMonth, currentPhotoBookId
   };
 }
-function restoreNavState(snap){
+function applyNavSnapshot(snap){
   currentView = snap.view; careSubView = snap.careSubView; healthSubView = snap.healthSubView;
   currentGrowthTab = snap.growthTab; timelineFilter = snap.timelineFilter;
   weekMetric = snap.weekMetric; weekActiveIdx = snap.weekActiveIdx; weekOffset = snap.weekOffset;
   rhythmDateKey = snap.rhythmDateKey; recapYearMonth = snap.recapYearMonth; currentPhotoBookId = snap.currentPhotoBookId;
 }
 /* Navigate to a secondary/drill-down screen, remembering exactly where we
-   came from. `opts` may set any of the same fields snapshotNavState reads. */
+   came from. `opts` may set any of the same fields currentNavSnapshot reads. */
 function navigateTo(view, opts){
   opts = opts || {};
-  navStack.push(snapshotNavState());
+  const fromView = currentView;
   currentView = view;
   if(opts.careSubView!==undefined) careSubView = opts.careSubView;
   if(opts.healthSubView!==undefined) healthSubView = opts.healthSubView;
   if(opts.rhythmDateKey!==undefined) rhythmDateKey = opts.rhythmDateKey;
   if(opts.timelineFilter!==undefined) timelineFilter = opts.timelineFilter;
   if(opts.weekMetric!==undefined) weekMetric = opts.weekMetric;
-  history.pushState({navDepth: navStack.length}, '', '#'+view);
+  history.pushState(currentNavSnapshot(fromView), '', '#'+view);
   render();
 }
-/* Root tabs (bottom nav) are independent stacks, not a linear history —
-   switching between them clears the back-stack rather than growing it. */
+/* Root tabs (bottom nav) are independent stacks, not a linear history — this
+   replaces the current history entry instead of pushing, so switching tabs
+   never piles up in the back button and drill-down history stays exactly
+   scoped to whichever root tab it happened on. */
 function switchRootView(view){
-  navStack = [];
   currentView = view; careSubView = null; healthSubView = null;
-  history.pushState({navDepth:0}, '', '#'+view);
+  history.replaceState(currentNavSnapshot(null), '', '#'+view);
   render();
 }
-function goBack(){
-  if(navStack.length){
-    const snap = navStack.pop();
-    restoreNavState(snap);
+/* The in-app "‹ Back" control and the real browser/Android Back button now
+   do the exact same thing — trigger browser history and let popstate apply
+   whatever state comes back — so there is exactly one code path for "go
+   back", not two that could disagree. */
+function handleBackTap(){ history.back(); }
+window.addEventListener('popstate', (e)=>{
+  if(e.state){
+    applyNavSnapshot(e.state);
     render();
-    requestAnimationFrame(()=> window.scrollTo(0, snap.scrollY||0));
   } else {
     currentView = VIEW_PARENT[currentView] || 'home';
     careSubView = null; healthSubView = null;
     render();
   }
+});
+/* Establishes a baseline history entry on first load so the very first
+   screen always has real state to fall back to, rather than a bare null. */
+function ensureInitialHistoryState(){
+  if(!history.state) history.replaceState(currentNavSnapshot(null), '', location.hash || ('#'+currentView));
 }
-/* Both the in-app "‹ Back" control and the real browser/Android Back button
-   end up here — pressing the in-app control just triggers browser history,
-   whose popstate handler calls goBack(), so there is exactly one code path
-   for "go back" rather than two that could drift out of sync. */
-function handleBackTap(){
-  if(navStack.length) history.back();
-  else goBack();
-}
-window.addEventListener('popstate', goBack);
 let currentGrowthTab = 'weight';
 let growthZoomed = true;
 let currentAddType = 'feed';
@@ -1142,7 +1162,7 @@ async function handleWakeUp(fromSheet){
   if(!result) return;
   if(fromSheet) closeSheet();
   renderMain();
-  showUndoToast(`✓ Sleep logged · ${fmtDuration(result.rec.mins)}`, async ()=>{
+  showUndoToast(`✓ Sleep logged${roleSuffix()} · ${fmtDuration(result.rec.mins)}`, async ()=>{
     state.sleeps = state.sleeps.filter(x=>x.id!==result.rec.id);
     state.activeSleep = { id: result.rec.id, startAt: result.startISO, createdBy: result.rec.createdBy, createdByRole: result.rec.createdByRole };
     startSleepTicker();
@@ -1680,7 +1700,8 @@ function setupFabScrollHide(){
    spec called out), so it can never go stale after a re-render swaps out
    the buttons underneath it. */
 function backButton(fallbackLabel){
-  const label = navStack.length ? (VIEW_LABEL[navStack[navStack.length-1].view] || 'Back') : (fallbackLabel || 'Home');
+  const fromView = (history.state && history.state.fromView) || null;
+  const label = fromView ? (VIEW_LABEL[fromView] || fallbackLabel || 'Back') : (fallbackLabel || 'Home');
   return `<button class="app-back" data-navback="1" style="border:none;background:none;color:var(--lavender-deep);font-weight:800;font-size:13px;cursor:pointer;padding:0 0 6px;display:flex;align-items:center;gap:4px;">${icon('back',15)}${escapeHtml(label)}</button>`;
 }
 let backDelegationAttached = false;
@@ -1731,6 +1752,7 @@ function render(){
   document.getElementById('sheetOverlay').addEventListener('click', (e)=>{ if(e.target.id==='sheetOverlay') closeSheet(); });
   setupFabScrollHide();
   setupBackDelegation();
+  ensureInitialHistoryState();
   renderMain();
 }
 function renderMain(){
@@ -1742,6 +1764,7 @@ function renderMain(){
   else if(currentView==='health') { main.innerHTML = renderHealth(); bindHealth(); }
   else if(currentView==='milestones') { main.innerHTML = renderMilestones(); bindMilestones(); }
   else if(currentView==='timeline') { main.innerHTML = renderTimeline(); bindTimeline(); }
+  else if(currentView==='dayflow') { main.innerHTML = renderDayFlowFull(); bindDayFlowFull(); }
   else if(currentView==='export') { main.innerHTML = renderExport(); bindExport(); }
   else if(currentView==='settings') { main.innerHTML = renderSettings(); bindSettings(); }
   else if(currentView==='brief') { main.innerHTML = renderDailyBrief(); bindDailyBrief(); }
@@ -2427,7 +2450,7 @@ function bindSheet(){
       await saveKey('nappies', state.nappies);
       closeSheet(); renderMain();
       const label = type==='wet'?'Wet nappy':type==='poo'?'Poo nappy':'Wet + poo nappy';
-      showUndoToast(`✓ ${label} logged`, async ()=>{
+      showUndoToast(`✓ ${label} logged${roleSuffix()}`, async ()=>{
         state.nappies = state.nappies.filter(x=>x.id!==rec.id);
         await saveKey('nappies', state.nappies);
         renderMain();
@@ -2444,13 +2467,23 @@ function bindSheet(){
     const date = document.getElementById('nappyDateInput').value;
     const note = document.getElementById('nappyNoteInput').value.trim();
     if(!date){ toast('Pick a time'); return; }
-    if(editingKind==='nappy' && editingId){
+    const isEdit = editingKind==='nappy' && editingId;
+    const prevItem = isEdit ? {...editingItem} : null;
+    let recId;
+    if(isEdit){
+      recId = editingId;
       updateEntry('nappy', editingId, {type:currentNappyType, date:new Date(date).toISOString(), note});
     } else {
-      state.nappies.push({id:uid(), type:currentNappyType, date:new Date(date).toISOString(), note, ...attributionFields()});
+      recId = uid();
+      state.nappies.push({id:recId, type:currentNappyType, date:new Date(date).toISOString(), note, ...attributionFields()});
     }
     await saveKey('nappies', state.nappies);
-    await flashButtonSuccess('saveNappyDetailed', '✓ Logged'); closeSheet(); renderMain();
+    closeSheet(); renderMain();
+    if(isEdit){
+      showUndoToast(`Nappy updated${roleSuffix()}`, async ()=>{ updateEntry('nappy', recId, prevItem); await saveKey('nappies', state.nappies); renderMain(); });
+    } else {
+      showUndoToast(`✓ Nappy logged${roleSuffix()}`, async ()=>{ state.nappies = state.nappies.filter(x=>x.id!==recId); await saveKey('nappies', state.nappies); renderMain(); });
+    }
   });
   const delNappy = document.getElementById('deleteNappyBtn');
   if(delNappy) delNappy.addEventListener('click', ()=> deleteEntryWithUndo('nappy', editingId));
@@ -2491,13 +2524,23 @@ function bindSheet(){
     }
     state.prefs = state.prefs||{};
     if(!sheetPumpForced) state.prefs.lastFeedType = subtype;
-    if(editingKind==='feed' && editingId){
+    const isEdit = editingKind==='feed' && editingId;
+    const prevItem = isEdit ? {...editingItem} : null;
+    let recId;
+    if(isEdit){
+      recId = editingId;
       updateEntry('feed', editingId, patch);
     } else {
-      state.feeds.push(Object.assign({id:uid()}, patch, attributionFields()));
+      recId = uid();
+      state.feeds.push(Object.assign({id:recId}, patch, attributionFields()));
     }
     await saveKey('feeds', state.feeds);
-    await flashButtonSuccess('qlSaveFeed', '✓ Logged'); closeSheet(); renderMain();
+    closeSheet(); renderMain();
+    if(isEdit){
+      showUndoToast(`Feed updated${roleSuffix()}`, async ()=>{ updateEntry('feed', recId, prevItem); await saveKey('feeds', state.feeds); renderMain(); });
+    } else {
+      showUndoToast(`✓ Feed logged${roleSuffix()}`, async ()=>{ state.feeds = state.feeds.filter(x=>x.id!==recId); await saveKey('feeds', state.feeds); renderMain(); });
+    }
   });
   const delFeed = document.getElementById('deleteFeedBtn');
   if(delFeed) delFeed.addEventListener('click', ()=> deleteEntryWithUndo('feed', editingId));
@@ -2548,13 +2591,23 @@ function bindSheet(){
     if(new Date(endISO) <= new Date(startISO)){ toast('End time must be after start time'); return; }
     const mins = Math.round((new Date(endISO)-new Date(startISO))/60000);
     const err = checkBounds(mins, 'sleepMins'); if(err){ toast(err); return; }
-    if(editingKind==='sleep' && editingId){
+    const isEdit = editingKind==='sleep' && editingId;
+    const prevItem = isEdit ? {...editingItem} : null;
+    let recId;
+    if(isEdit){
+      recId = editingId;
       updateEntry('sleep', editingId, {date:startISO, endAt:endISO, label:currentSleepType, mins, note});
     } else {
-      state.sleeps.push({id:uid(), date:startISO, endAt:endISO, label:currentSleepType, mins, note, source:'manual', ...attributionFields()});
+      recId = uid();
+      state.sleeps.push({id:recId, date:startISO, endAt:endISO, label:currentSleepType, mins, note, source:'manual', ...attributionFields()});
     }
     await saveKey('sleep', state.sleeps);
-    await flashButtonSuccess('qlSaveSleep', '✓ Logged'); closeSheet(); renderMain();
+    closeSheet(); renderMain();
+    if(isEdit){
+      showUndoToast(`Sleep updated${roleSuffix()}`, async ()=>{ updateEntry('sleep', recId, prevItem); await saveKey('sleep', state.sleeps); renderMain(); });
+    } else {
+      showUndoToast(`✓ Sleep logged${roleSuffix()} · ${fmtDuration(mins)}`, async ()=>{ state.sleeps = state.sleeps.filter(x=>x.id!==recId); await saveKey('sleep', state.sleeps); renderMain(); });
+    }
   });
   const delSleep = document.getElementById('deleteSleepBtn');
   if(delSleep) delSleep.addEventListener('click', ()=> deleteEntryWithUndo('sleep', editingId));
@@ -2615,13 +2668,23 @@ function bindSheet(){
     }
     outlierWarning = null;
     const note = document.getElementById('qlMeasureNote') ? document.getElementById('qlMeasureNote').value.trim() : '';
-    if(editingKind==='measurement' && editingId){
+    const isEdit = editingKind==='measurement' && editingId;
+    const prevItem = isEdit ? {...editingItem} : null;
+    let recId;
+    if(isEdit){
+      recId = editingId;
       updateEntry('measurement', editingId, {type:mtype, date:dateISO, value:val, note});
     } else {
-      state.measurements.push({id:uid(), type:mtype, date:dateISO, value:val, note, ...attributionFields()});
+      recId = uid();
+      state.measurements.push({id:recId, type:mtype, date:dateISO, value:val, note, ...attributionFields()});
     }
     await saveKey('measurements', state.measurements);
-    await flashButtonSuccess('qlSaveMeasure', '✓ Logged'); closeSheet(); renderMain();
+    closeSheet(); renderMain();
+    if(isEdit){
+      showUndoToast(`${labelType(mtype)} updated${roleSuffix()}`, async ()=>{ updateEntry('measurement', recId, prevItem); await saveKey('measurements', state.measurements); renderMain(); });
+    } else {
+      showUndoToast(`✓ ${labelType(mtype)} logged${roleSuffix()} · ${val}${unitFor(mtype)}`, async ()=>{ state.measurements = state.measurements.filter(x=>x.id!==recId); await saveKey('measurements', state.measurements); renderMain(); });
+    }
   });
   const delMeasure = document.getElementById('deleteMeasureBtn');
   if(delMeasure) delMeasure.addEventListener('click', ()=> deleteEntryWithUndo('measurement', editingId));
@@ -3052,7 +3115,7 @@ function bindHome(){
       } else if(action==='feedswitch'){
         switchBreastfeedSide(); renderMain();
       } else if(action==='feedfinish'){
-        const rec = await finishBreastfeed(); if(rec) { renderMain(); showUndoToast(`✓ Feed logged · ${fmtDuration(rec.totalMins)}`, async ()=>{ state.feeds=state.feeds.filter(x=>x.id!==rec.id); state.activeBreastfeed={id:rec.id, segments:[{side:rec.firstSide,start:rec.date,end:null}]}; startFastTicker(); await saveKey('feeds', state.feeds); renderMain(); }); }
+        const rec = await finishBreastfeed(); if(rec) { renderMain(); showUndoToast(`✓ Feed logged${roleSuffix()} · ${fmtDuration(rec.totalMins)}`, async ()=>{ state.feeds=state.feeds.filter(x=>x.id!==rec.id); state.activeBreastfeed={id:rec.id, segments:[{side:rec.firstSide,start:rec.date,end:null}]}; startFastTicker(); await saveKey('feeds', state.feeds); renderMain(); }); }
       } else if(action==='nappy'){
         openSheet('nappy');
       } else if(action==='tummy'){
@@ -3061,7 +3124,7 @@ function bindHome(){
         if(isTummyTimePaused()) resumeTummyTime(); else pauseTummyTime();
         renderMain();
       } else if(action==='tummyfinish'){
-        const rec = await finishTummyTime(); if(rec) { renderMain(); showUndoToast(`✓ Tummy time logged · ${fmtMMSS(rec.durationSeconds)}`, async ()=>{ state.tummyTime=state.tummyTime.filter(x=>x.id!==rec.id); state.activeTummyTime={id:rec.id, segments:[{start:rec.startedAt,end:null}]}; startFastTicker(); await saveKey('tummyTime', state.tummyTime); renderMain(); }); }
+        const rec = await finishTummyTime(); if(rec) { renderMain(); showUndoToast(`✓ Tummy time logged${roleSuffix()} · ${fmtMMSS(rec.durationSeconds)}`, async ()=>{ state.tummyTime=state.tummyTime.filter(x=>x.id!==rec.id); state.activeTummyTime={id:rec.id, segments:[{start:rec.startedAt,end:null}]}; startFastTicker(); await saveKey('tummyTime', state.tummyTime); renderMain(); }); }
       }
     });
   });
@@ -5335,167 +5398,203 @@ function nursingBalance(days){
   const leftSessions = list.filter(f=>(f.leftMins||0)>0).length, rightSessions = list.filter(f=>(f.rightMins||0)>0).length;
   return { leftMin, rightMin, total, leftPct: total?Math.round(leftMin/total*100):0, rightPct: total?Math.round(rightMin/total*100):0, leftSessions, rightSessions, sessionCount:list.length };
 }
-/* ---------------- 24-Hour Rhythm view: Today/Yesterday/any date, one aligned timeline ---------------- */
+/* ---------------- Day Flow: one day's narrative, not three parallel lanes ---------------- */
 let rhythmDateKey = null;
 function shiftDayKey(dayKey, delta){ return sydDateKey(sydMidnightUTC(dayKey) + delta*86400000 + 43200000); }
-/* Embeddable Daily Rhythm — the actual visual lives here so it can be a
-   prominent, permanent part of Care rather than a page reached by a link.
-   Reuses the exact same canonical functions as everywhere else (dailySummary,
-   getDailyNappyStats, effectiveSleepRecords/sleepBounds for the calendar-
-   overlap clipping) so its numbers can never drift from Home/Care/7-Day
-   Summary/Ask Keshavi for the same date. */
-let expandedRhythmCluster = null;
-function clusterRhythmMarkers(items, minGapPx){
-  const sorted = items.slice().sort((a,b)=>a.top-b.top);
-  const clusters = [];
-  sorted.forEach(it=>{
-    const last = clusters[clusters.length-1];
-    if(last && (it.top - last.items[last.items.length-1].top) < minGapPx) last.items.push(it);
-    else clusters.push({ top: it.top, items:[it] });
-  });
-  return clusters;
-}
-function renderMarkerLane(items, laneLeft, defaultColor, laneKey){
-  const clusters = clusterRhythmMarkers(items, 16);
-  return clusters.map((c,ci)=>{
-    const clusterId = laneKey+'-'+ci;
-    if(c.items.length===1){
-      const it = c.items[0];
-      return `<div class="rhythm-marker" data-tlitem="${it.kind}:${it.id}" style="left:${laneLeft}px;top:${c.top.toFixed(0)}px;"><span class="rhythm-dot" style="background:${it.color||defaultColor};"></span><span class="rhythm-marker-time">${it.timeLabel}</span></div>`;
-    }
-    const isExpanded = expandedRhythmCluster===clusterId;
-    return `
-      <div class="rhythm-cluster" data-rhcluster="${clusterId}" style="left:${laneLeft}px;top:${c.top.toFixed(0)}px;"><span class="rhythm-dot" style="background:${defaultColor};"></span><span class="rhythm-marker-time">${c.items.length}</span></div>
-      ${isExpanded ? `<div class="rhythm-cluster-expand" style="left:${laneLeft}px;top:${(c.top+16).toFixed(0)}px;">${c.items.map(it=>`<div class="rhythm-marker" data-tlitem="${it.kind}:${it.id}"><span class="rhythm-dot" style="background:${it.color||defaultColor};"></span><span class="rhythm-marker-time">${it.timeLabel}</span></div>`).join('')}</div>` : ''}
-    `;
-  }).join('');
-}
-function renderRhythmBody(dayKeyArg){
-  const dayKey = dayKeyArg || sydDateKey();
-  const todayKey = sydDateKey();
-  const isToday = dayKey===todayKey;
+/* One authoritative source for a day's raw event data — Care's Today
+   summary, the Day Flow ribbon/full view, the 7-Day Summary's selected-day
+   card, and Ask Keshavi all read the same canonical dailySummary/
+   getDailyNappyStats/effectiveSleepRecords functions this wraps, so none of
+   them can ever quietly disagree about what happened on a given date. */
+function getDayFlowData(dayKey){
   const dayStart = sydMidnightUTC(dayKey), dayEnd = dayStart+86400000;
-  const PX_PER_MIN = 0.45;
-  const totalHeight = Math.round(1440*PX_PER_MIN);
-  const minutesFromMidnight = ms => (ms-dayStart)/60000;
-  const dark = isDarkMode();
-
   const sleepBlocks = effectiveSleepRecords().map(s=>{
     const {start,end} = sleepBounds(s);
     const clipStart = Math.max(start.getTime(), dayStart), clipEnd = Math.min(end.getTime(), dayEnd);
     if(clipEnd<=clipStart) return null;
-    return { s, clipStart, clipEnd, startedBefore: start.getTime()<dayStart, continuesAfter: end.getTime()>dayEnd };
-  }).filter(Boolean);
+    return { s, clipStart, clipEnd, startedBefore: start.getTime()<dayStart, continuesAfter: end.getTime()>dayEnd, isActive: !!s._active };
+  }).filter(Boolean).sort((a,b)=>a.clipStart-b.clipStart);
   const feeds = state.feeds.map(normalizeFeed).filter(f=> sydDateKey(f.date)===dayKey);
   const nappies = state.nappies.filter(n=> sydDateKey(n.date)===dayKey);
   const temps = state.temperatures.filter(t=> sydDateKey(t.date)===dayKey);
-  const hasAny = sleepBlocks.length || feeds.length || nappies.length || temps.length;
+  return {
+    dayKey, dayStart, dayEnd, sleepBlocks, feeds, nappies, temps,
+    ds: dailySummary(new Date(dayKey+'T12:00:00')),
+    nappyStats: getDailyNappyStats(new Date(dayKey+'T12:00:00')),
+    hasAny: sleepBlocks.length || feeds.length || nappies.length || temps.length
+  };
+}
+/* Turns the raw day data into one chronological sequence of sleep blocks and
+   the events that happened in between — a "narrative", not three columns.
+   Awake durations are only claimed where a real sleep boundary supports
+   them (spec: never invent wake time from an absence of data): the gap
+   before the day's first known sleep, and — for a past day — the gap after
+   its last known sleep, are shown as plain event groups with no "Awake"
+   duration header, since we can't be sure what happened just outside them. */
+function buildDayFlowSegments(data){
+  const { sleepBlocks, feeds, nappies, temps, dayStart, dayEnd, dayKey } = data;
+  const isToday = dayKey===sydDateKey();
+  const nowMs = Date.now();
+  const allEvents = [
+    ...feeds.map(f=>({kind:'feed', id:f.id, ms:new Date(f.date).getTime(), item:f})),
+    ...nappies.map(n=>({kind:'nappy', id:n.id, ms:new Date(n.date).getTime(), item:n})),
+    ...temps.map(t=>({kind:'temperature', id:t.id, ms:new Date(t.date).getTime(), item:t}))
+  ].sort((a,b)=>a.ms-b.ms);
+  const eventsBetween = (start,end) => allEvents.filter(e=> e.ms>=start && e.ms<end);
 
-  const dsForDay = dailySummary(new Date(dayKey+'T12:00:00'));
-  const nappyStatsForDay = getDailyNappyStats(new Date(dayKey+'T12:00:00'));
-  const dateLabel = new Date(dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ});
-
-  const LANE_SLEEP_L = 34, LANE_SLEEP_W = 64, LANE_FEED_L = 106, LANE_NAPPY_L = 208;
-  const feedColor = dark?'#F2A796':'#EC9384', nappyWetColor='#5FA8D3', nappyDirtyColor = dark?'#D9A15C':'#B8823A', tempColor='var(--status-critical-fg)';
-
-  let hourLines = '', hourLabels = '';
-  for(let h=0; h<24; h++){
-    const top = h*60*PX_PER_MIN;
-    const major = h%3===0;
-    hourLines += `<div class="rhythm-gridline" style="top:${top}px;opacity:${major?0.9:0.35};"></div>`;
-    if(major){
-      const label = h===0?'12a':h<12?h+'a':h===12?'12p':(h-12)+'p';
-      hourLabels += `<div class="rhythm-hour-label" style="top:${(top-6).toFixed(0)}px;">${label}</div>`;
+  const segments = [];
+  let cursor = dayStart;
+  sleepBlocks.forEach((b,i)=>{
+    if(b.clipStart > cursor){
+      const evs = eventsBetween(cursor, b.clipStart);
+      const confident = i>0;
+      if(evs.length || confident) segments.push({ type:'awake', start:cursor, end:b.clipStart, confident, events:evs });
     }
+    segments.push({ type:'sleep', block:b });
+    cursor = b.clipEnd;
+  });
+  const tailEnd = isToday ? Math.min(dayEnd, nowMs) : dayEnd;
+  if(tailEnd > cursor){
+    const evs = eventsBetween(cursor, tailEnd);
+    const confident = sleepBlocks.length>0 && isToday;
+    if(evs.length || confident) segments.push({ type:'awake', start:cursor, end:tailEnd, confident, events:evs });
   }
-  const sleepHtml = sleepBlocks.map(b=>{
-    const top = minutesFromMidnight(b.clipStart)*PX_PER_MIN;
-    const height = Math.max(5, (minutesFromMidnight(b.clipEnd)-minutesFromMidnight(b.clipStart))*PX_PER_MIN);
-    return `<div data-tlitem="sleep:${b.s.id}" class="rhythm-sleep-block" style="left:${LANE_SLEEP_L}px;width:${LANE_SLEEP_W}px;top:${top.toFixed(0)}px;height:${height.toFixed(0)}px;background:${b.s.label==='nap'?'rgba(183,159,209,.32)':'rgba(142,111,176,.42)'};">
-      ${height>=22 ? `<span class="rhythm-sleep-icon">😴</span>` : ''}
-      ${(b.startedBefore||b.continuesAfter) && height>=36 ? `<span class="rhythm-sleep-flag">${b.startedBefore?'↑':''}${b.continuesAfter?'↓':''}</span>` : ''}
-    </div>`;
-  }).join('');
-  const feedItems = feeds.map(f=>({ kind:'feed', id:f.id, color:feedColor, timeLabel:fmtTime(f.date), top: minutesFromMidnight(new Date(f.date).getTime())*PX_PER_MIN }));
-  const nappyItems = nappies.map(n=>({ kind:'nappy', id:n.id, color:n.type==='poo'?nappyDirtyColor:nappyWetColor, timeLabel:fmtTime(n.date), top: minutesFromMidnight(new Date(n.date).getTime())*PX_PER_MIN }));
-  const tempItems = temps.map(t=>({ kind:'temperature', id:t.id, color:tempColor, timeLabel:`${t.tempC}°`, top: minutesFromMidnight(new Date(t.date).getTime())*PX_PER_MIN }));
-  const feedHtml = renderMarkerLane(feedItems, LANE_FEED_L, feedColor, 'feed');
-  const nappyHtml = renderMarkerLane([...nappyItems, ...tempItems], LANE_NAPPY_L, nappyWetColor, 'nappy');
-  const nowLine = isToday ? `<div class="rhythm-now-line" style="top:${(minutesFromMidnight(Date.now())*PX_PER_MIN).toFixed(0)}px;"><span class="rhythm-now-dot"></span></div>` : '';
-  const laneHeads = hasAny ? `
-    <div class="rhythm-lane-head" style="left:${LANE_SLEEP_L}px;">Sleep</div>
-    <div class="rhythm-lane-head" style="left:${LANE_FEED_L}px;">Feed</div>
-    <div class="rhythm-lane-head" style="left:${LANE_NAPPY_L}px;">Nappy</div>
-  ` : '';
-
+  return segments;
+}
+function dayFlowEventIcon(kind, item){
+  if(kind==='feed') return icon('feed',13);
+  if(kind==='nappy') return icon('nappy',13);
+  return icon('temp',13);
+}
+function dayFlowEventDesc(kind, item){
+  if(kind==='feed') return feedSummaryLine(item).replace(/^🍼\s*/,'');
+  if(kind==='nappy') return item.type==='wet'?'Wet nappy':item.type==='poo'?'Dirty nappy':'Wet + dirty nappy';
+  return `${item.tempC}°C`;
+}
+function renderDayFlowEventRow(e){
+  return `<div class="dayflow-event" data-tlitem="${e.kind}:${e.id}"><span class="dayflow-time">${fmtTime(e.item.date)}</span><span class="dayflow-icon">${dayFlowEventIcon(e.kind,e.item)}</span><span class="dayflow-desc">${escapeHtml(dayFlowEventDesc(e.kind,e.item))}</span></div>`;
+}
+function renderDayFlowSleepSegment(block){
+  const isOngoing = block.isActive;
+  const startLabel = block.startedBefore ? 'Continued from yesterday' : fmtTime(block.s.date);
+  const endLabel = isOngoing ? 'now' : (block.continuesAfter ? 'continues tomorrow' : fmtTime(block.s.endAt));
+  const durMin = (block.clipEnd-block.clipStart)/60000;
+  const durLabel = fmtDuration(durMin) + ((block.startedBefore||block.continuesAfter) ? ' today' : '');
   return `
-    <div style="display:flex;align-items:center;justify-content:space-between;">
-      <div style="font-weight:800;font-size:14px;">${isToday?'Today · ':''}${dateLabel}</div>
-      <div style="display:flex;align-items:center;gap:2px;">
-        <button class="ql-link" data-rhprev="1" style="padding:4px 6px;" aria-label="Previous day">‹</button>
-        ${!isToday ? `<button class="ql-link" data-rhtoday="1" style="padding:4px 6px;">Today</button>` : ''}
-        <button class="ql-link" data-rhnext="1" style="padding:4px 6px;${isToday?'opacity:.3;pointer-events:none;':''}" aria-label="Next day">›</button>
-        <button class="ql-link" id="rhythmDateBtn" style="padding:4px 6px;" aria-label="Choose date">${icon('calendar',14)}</button>
-        <input type="date" id="rhythmDatePicker" value="${dayKey}" max="${todayDateInput()}" style="width:1px;height:1px;padding:0;border:0;opacity:0;position:absolute;">
+    <div class="dayflow-sleep" ${isOngoing?'':`data-tlitem="sleep:${block.s.id}"`}>
+      <div class="dayflow-sleep-icon">${icon('sleep',15)}</div>
+      <div style="flex:1;">
+        <div class="dayflow-sleep-title">${isOngoing?'Sleeping now':'Sleep'}</div>
+        <div class="dayflow-sleep-time">${startLabel} → ${endLabel}</div>
+        <div class="dayflow-sleep-dur">${durLabel}</div>
+        ${isOngoing ? `<div class="dayflow-sleep-actions"><button class="btn secondary" id="dayFlowWakeUpBtn" style="padding:7px 16px;font-size:12.5px;">Wake up</button></div>` : ''}
       </div>
     </div>
-    <div class="stat-row" style="margin:8px 0 4px;">
-      <div class="stat-cell"><div class="stat-val">${fmtDuration(dsForDay.totalSleepMin)}</div><div class="stat-lbl">Sleep${isToday?' so far':''}</div></div>
-      <div class="stat-div"></div>
-      <div class="stat-cell"><div class="stat-val">${dsForDay.feedCount}</div><div class="stat-lbl">Feeds</div></div>
-      <div class="stat-div"></div>
-      <div class="stat-cell"><div class="stat-val">${nappyStatsForDay.wet}💧 ${nappyStatsForDay.dirty}💩</div><div class="stat-lbl">Nappies</div></div>
-    </div>
-    ${hasAny ? `
-    <div class="rhythm-lanes" style="height:${totalHeight}px;margin-top:26px;overflow-x:auto;">
-      ${hourLines}${hourLabels}${laneHeads}${sleepHtml}${feedHtml}${nappyHtml}${nowLine}
-    </div>` : `<div class="empty" style="margin-top:10px;">No activity logged for this day.</div>`}
-    <button class="ql-link" id="goTimelineFromRhythm" style="padding:10px 0 0;">Open chronological timeline →</button>
   `;
 }
-function bindRhythmBody(){
-  document.querySelectorAll('[data-rhprev]').forEach(b=> b.addEventListener('click', ()=>{
+function renderDayFlowSegment(seg){
+  if(seg.type==='sleep') return renderDayFlowSleepSegment(seg.block);
+  const header = seg.confident ? `<div class="dayflow-awake-header">Awake · ${fmtDuration((seg.end-seg.start)/60000)}</div>` : '';
+  return `${header}${seg.events.map(renderDayFlowEventRow).join('')}`;
+}
+/* ---- Compact 24h ribbon: the precise, proportional view. Lives in Care. ---- */
+function renderDayFlowRibbon(dayKey){
+  const data = getDayFlowData(dayKey);
+  const isToday = dayKey===sydDateKey();
+  const pctOf = ms => Math.max(0, Math.min(100, ((ms-data.dayStart)/86400000)*100));
+  const sleepBars = data.sleepBlocks.map(b=>{
+    const left = pctOf(b.clipStart), width = Math.max(0.6, pctOf(b.clipEnd)-pctOf(b.clipStart));
+    return `<div class="dayflow-ribbon-sleep" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%;"></div>`;
+  }).join('');
+  const feedDots = data.feeds.map(f=>`<div class="dayflow-ribbon-dot dayflow-ribbon-feed" style="left:${pctOf(new Date(f.date).getTime()).toFixed(2)}%;"></div>`).join('');
+  const nappyDots = data.nappies.map(n=>`<div class="dayflow-ribbon-dot dayflow-ribbon-nappy" style="left:${pctOf(new Date(n.date).getTime()).toFixed(2)}%;"></div>`).join('');
+  const nowMarker = isToday ? `<div class="dayflow-ribbon-now" style="left:${pctOf(Date.now()).toFixed(2)}%;"></div>` : '';
+  const dateLabel = new Date(dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ});
+  return `
+    <div style="font-weight:800;font-size:14px;">${isToday?'Today · ':''}${dateLabel}</div>
+    <div class="dayflow-ribbon-wrap" id="dayFlowRibbon" style="margin-top:10px;">
+      <div class="dayflow-ribbon-ticks"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>
+      <div class="dayflow-ribbon">
+        <div class="dayflow-ribbon-track">${sleepBars}</div>
+        <div class="dayflow-ribbon-feeds">${feedDots}</div>
+        <div class="dayflow-ribbon-nappies">${nappyDots}</div>
+        ${nowMarker}
+      </div>
+    </div>
+    <div class="dayflow-summary-row">
+      <div class="dayflow-summary-item"><b>${fmtDuration(data.ds.totalSleepMin)}</b> sleep</div>
+      <div class="dayflow-summary-item"><b>${data.ds.feedCount}</b> feeds</div>
+      <div class="dayflow-summary-item"><b>${data.nappyStats.wet}💧 ${data.nappyStats.dirty}💩</b> nappies</div>
+    </div>
+  `;
+}
+function bindDayFlowRibbon(){
+  const el = document.getElementById('dayFlowRibbon');
+  if(el) el.addEventListener('click', ()=> openDayFlow(rhythmDateKey||sydDateKey()));
+}
+/* ---- Full Day Flow: chronological narrative, its own destination. ---- */
+function renderDayFlowFull(){
+  const dayKey = rhythmDateKey || sydDateKey();
+  const isToday = dayKey===sydDateKey();
+  const data = getDayFlowData(dayKey);
+  const dateLabel = new Date(dayKey+'T12:00:00').toLocaleDateString(undefined,{weekday:'long', day:'numeric', month:'long', timeZone:APP_TZ});
+  const segments = buildDayFlowSegments(data);
+  return `
+    <div class="hero">${backButton('Care')}<h1>Day Flow</h1></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-weight:800;font-size:15px;">${isToday?'Today · ':''}${dateLabel}</div>
+      <div style="display:flex;align-items:center;gap:2px;">
+        <button class="ql-link" data-dfprev="1" style="padding:4px 6px;" aria-label="Previous day">‹</button>
+        ${!isToday ? `<button class="ql-link" data-dftoday="1" style="padding:4px 6px;">Today</button>` : ''}
+        <button class="ql-link" data-dfnext="1" style="padding:4px 6px;${isToday?'opacity:.3;pointer-events:none;':''}" aria-label="Next day">›</button>
+        <button class="ql-link" id="dayFlowDateBtn" style="padding:4px 6px;" aria-label="Choose date">${icon('calendar',14)}</button>
+        <input type="date" id="dayFlowDatePicker" value="${dayKey}" max="${todayDateInput()}" style="width:1px;height:1px;padding:0;border:0;opacity:0;position:absolute;">
+      </div>
+    </div>
+    <div class="dayflow-summary-row" style="margin-top:10px;">
+      <div class="dayflow-summary-item"><b>${fmtDuration(data.ds.totalSleepMin)}</b> sleep${isToday?' so far':''}</div>
+      <div class="dayflow-summary-item"><b>${data.ds.feedCount}</b> feeds</div>
+      <div class="dayflow-summary-item"><b>${data.nappyStats.wet}💧 ${data.nappyStats.dirty}💩</b> nappies</div>
+    </div>
+    ${data.hasAny ? `<div style="margin-top:10px;">${segments.map(renderDayFlowSegment).join('')}</div>` : `
+      <div class="empty" style="margin-top:16px;">No activity logged for this day.</div>
+      <button class="btn" id="dayFlowLogBtn" style="margin-top:10px;">Log activity</button>
+    `}
+    <button class="ql-link" id="goTimelineFromDayFlow" style="padding:14px 0 0;">Open chronological timeline →</button>
+  `;
+}
+function bindDayFlowFull(){
+  document.querySelectorAll('[data-dfprev]').forEach(b=> b.addEventListener('click', ()=>{
     const k = shiftDayKey(rhythmDateKey||sydDateKey(), -1);
-    rhythmDateKey = k===sydDateKey() ? null : k; expandedRhythmCluster=null; renderMain();
+    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
   }));
-  document.querySelectorAll('[data-rhnext]').forEach(b=> b.addEventListener('click', ()=>{
+  document.querySelectorAll('[data-dfnext]').forEach(b=> b.addEventListener('click', ()=>{
     const k = shiftDayKey(rhythmDateKey||sydDateKey(), 1);
     if(k>sydDateKey()) return;
-    rhythmDateKey = k===sydDateKey() ? null : k; expandedRhythmCluster=null; renderMain();
+    rhythmDateKey = k===sydDateKey() ? null : k; renderMain();
   }));
-  document.querySelectorAll('[data-rhtoday]').forEach(b=> b.addEventListener('click', ()=>{ rhythmDateKey=null; expandedRhythmCluster=null; renderMain(); }));
-  const picker = document.getElementById('rhythmDatePicker');
-  const dateBtn = document.getElementById('rhythmDateBtn');
+  document.querySelectorAll('[data-dftoday]').forEach(b=> b.addEventListener('click', ()=>{ rhythmDateKey=null; renderMain(); }));
+  const picker = document.getElementById('dayFlowDatePicker');
+  const dateBtn = document.getElementById('dayFlowDateBtn');
   if(dateBtn && picker) dateBtn.addEventListener('click', ()=>{ if(picker.showPicker) picker.showPicker(); else picker.click(); });
-  if(picker) picker.addEventListener('change', ()=>{ rhythmDateKey = picker.value===sydDateKey() ? null : picker.value; expandedRhythmCluster=null; renderMain(); });
-  document.querySelectorAll('[data-rhcluster]').forEach(el=>{
-    el.addEventListener('click', ()=>{
-      const id = el.dataset.rhcluster;
-      expandedRhythmCluster = expandedRhythmCluster===id ? null : id;
-      renderMain();
-    });
-  });
+  if(picker) picker.addEventListener('change', ()=>{ rhythmDateKey = picker.value===sydDateKey() ? null : picker.value; renderMain(); });
   document.querySelectorAll('[data-tlitem]').forEach(row=>{
-    row.addEventListener('click', ()=>{ const [kind,id]=row.dataset.tlitem.split(':'); openDetailSheet(kind,id); });
+    row.addEventListener('click', ()=>{ const [kind,id]=row.dataset.tlitem.split(':'); if(kind) openDetailSheet(kind,id); });
   });
-  const gtfr = document.getElementById('goTimelineFromRhythm');
+  const wakeBtn = document.getElementById('dayFlowWakeUpBtn');
+  if(wakeBtn) wakeBtn.addEventListener('click', async ()=>{ wakeBtn.disabled=true; await handleWakeUp(false); });
+  const logBtn = document.getElementById('dayFlowLogBtn');
+  if(logBtn) logBtn.addEventListener('click', ()=> openSheet('menu'));
+  const gtfr = document.getElementById('goTimelineFromDayFlow');
   if(gtfr) gtfr.addEventListener('click', ()=> navigateTo('timeline'));
 }
-/* The single reusable entry point for "show me this date's Daily Rhythm" —
-   used by the 7-Day Summary's "View day", and available for Daily Brief or
-   any future caller, so date-opening behaviour is never reimplemented per
-   component. Since Daily Rhythm already lives inline in Care, this updates
-   the selected date in place and scrolls to it rather than navigating to a
-   separate duplicate page — but still pushes navigation state so Back
-   correctly restores whatever date/context was showing before. */
-function openDailyRhythm(dayKey){
-  navigateTo('care', { rhythmDateKey: dayKey===sydDateKey() ? null : dayKey });
-  requestAnimationFrame(()=>{
-    const el = document.getElementById('dailyRhythmCard');
-    if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-  });
+/* The single entry point for "show me this date's Day Flow" — used by the
+   7-Day Summary's "View day" and available to any future caller, so
+   date-opening logic is never reimplemented per component. */
+function openDayFlow(dayKey){
+  navigateTo('dayflow', { rhythmDateKey: dayKey===sydDateKey() ? null : dayKey });
 }
-function openRhythmDay(dayKey){ openDailyRhythm(dayKey); }
+function openRhythmDay(dayKey){ openDayFlow(dayKey); }
 /* ---------------- Smart Daily Brief: rolling last-24h view, distinct from "today" calendar totals ---------------- */
 function computeDailyBrief(){
   const cutoff = Date.now()-24*3600000;
@@ -5766,9 +5865,10 @@ function renderCareOverview(){
       <div class="rline">Growth: ${ds.growthToday.length ? ds.growthToday.map(m=>`${labelType(m.type)} ${m.value}${unitFor(m.type)}`).join(', ') : 'No measurement today'}</div>
     </div>
 
-    <div class="card" id="dailyRhythmCard">
-      <h2>Daily Rhythm</h2>
-      ${renderRhythmBody(rhythmDateKey)}
+    <div class="card">
+      <h2>Day Flow</h2>
+      ${renderDayFlowRibbon(rhythmDateKey||sydDateKey())}
+      <button class="ql-link" id="viewFullDayFlowBtn" style="padding:10px 0 0;">View full day →</button>
     </div>
 
     ${renderWeekRhythm()}
@@ -6062,7 +6162,7 @@ function bindCare(){
   const devTummyFinishBtn = document.getElementById('devTummyFinishBtn');
   if(devTummyFinishBtn) devTummyFinishBtn.addEventListener('click', async ()=>{
     const rec = await finishTummyTime();
-    if(rec){ renderMain(); showUndoToast(`✓ Tummy time logged · ${fmtMMSS(rec.durationSeconds)}`, async ()=>{ state.tummyTime=state.tummyTime.filter(x=>x.id!==rec.id); state.activeTummyTime={id:rec.id, segments:[{start:rec.startedAt,end:null}]}; startFastTicker(); await saveKey('tummyTime', state.tummyTime); renderMain(); }); }
+    if(rec){ renderMain(); showUndoToast(`✓ Tummy time logged${roleSuffix()} · ${fmtMMSS(rec.durationSeconds)}`, async ()=>{ state.tummyTime=state.tummyTime.filter(x=>x.id!==rec.id); state.activeTummyTime={id:rec.id, segments:[{start:rec.startedAt,end:null}]}; startFastTicker(); await saveKey('tummyTime', state.tummyTime); renderMain(); }); }
   });
   const devTummyCancelBtn = document.getElementById('devTummyCancelBtn');
   if(devTummyCancelBtn) devTummyCancelBtn.addEventListener('click', ()=>{ cancelTummyTime(); renderMain(); });
@@ -6125,7 +6225,9 @@ function bindCare(){
     nursingBalancePeriod = nursingBalancePeriod===7 ? 30 : nursingBalancePeriod===30 ? 0 : 7;
     renderMain();
   });
-  bindRhythmBody();
+  bindDayFlowRibbon();
+  const viewFullDayFlowBtn = document.getElementById('viewFullDayFlowBtn');
+  if(viewFullDayFlowBtn) viewFullDayFlowBtn.addEventListener('click', ()=> openDayFlow(rhythmDateKey||sydDateKey()));
   bindWeekRhythm();
   bindInsightCards();
   bindDeletes();
